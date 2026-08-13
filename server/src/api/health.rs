@@ -1,13 +1,9 @@
 use axum::{Json, Router, extract::State, http::StatusCode, response::IntoResponse, routing::get};
 use serde::Serialize;
-use sqlx::SqlitePool;
 
-#[derive(Clone)]
-pub struct HealthState {
-    pub pool: SqlitePool,
-}
+use crate::api::AppState;
 
-pub fn routes() -> Router<HealthState> {
+pub fn routes() -> Router<AppState> {
     Router::new().route("/api/health", get(health))
 }
 
@@ -18,7 +14,7 @@ struct Health {
     db: &'static str,
 }
 
-async fn health(State(state): State<HealthState>) -> impl IntoResponse {
+async fn health(State(state): State<AppState>) -> impl IntoResponse {
     // Cheap liveness check against the DB; anything more (latency, engine
     // status) lands with later phases.
     let db_ok = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();

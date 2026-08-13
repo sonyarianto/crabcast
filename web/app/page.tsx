@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Radio } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -96,9 +97,16 @@ export default function Home() {
         </Card>
 
         <p className="text-sm text-muted-foreground">
-          Phase 0 scaffold. Station control, media, and the live dashboard land
-          in the next phases.
+          Phase 1 live: station control plane with the Crabsoup engine. Media
+          library, requests, and analytics land in the next phases.
         </p>
+
+        <Link
+          href="/stations"
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs outline-none transition-[color,box-shadow] hover:bg-primary/90 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          Go to stations dashboard
+        </Link>
       </main>
     </div>
   );

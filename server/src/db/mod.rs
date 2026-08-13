@@ -1,6 +1,9 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+pub mod song_history;
+pub mod stations;
+
 /// Open the SQLite pool and run migrations at boot, before serving requests.
 pub async fn init(database_url: &str) -> anyhow::Result<SqlitePool> {
     let options = database_url

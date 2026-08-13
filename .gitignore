@@ -12,3 +12,6 @@ target/
 # Editor
 .vscode/
 .idea/
+
+# Runtime state
+station-data/

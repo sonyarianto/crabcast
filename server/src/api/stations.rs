@@ -1,0 +1,245 @@
+//! Station routes: CRUD, live status, control commands, SSE stream, and
+//! the engine track webhook receiver.
+
+use std::time::Duration;
+
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::response::IntoResponse;
+use axum::response::sse::{Event, KeepAlive, Sse};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::Deserialize;
+use serde::Serialize;
+use serde_json::json;
+use tokio_stream::StreamExt;
+use tokio_stream::wrappers::BroadcastStream;
+
+use crate::api::AppState;
+use crate::api::error::{ApiError, ApiResult};
+use crate::api::sse::{StationEvent, StatusEvent, TrackEvent, sse_frame};
+use crate::control::ControlClient;
+use crate::db::song_history;
+use crate::db::stations::{self, Station, StationInput};
+use crate::stations::supervisor::ProcessState;
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/api/stations", get(list_stations).post(create_station))
+        .route(
+            "/api/stations/{id}",
+            get(get_station).put(update_station).delete(delete_station),
+        )
+        .route("/api/stations/{id}/status", get(station_status))
+        .route("/api/stations/{id}/cmd", post(station_cmd))
+        .route("/api/stations/{id}/events", get(station_events))
+        .route("/api/stations/{id}/history", get(station_history))
+        .route("/api/webhooks/track", post(track_webhook))
+}
+
+async fn list_stations(State(state): State<AppState>) -> ApiResult<Json<Vec<Station>>> {
+    Ok(Json(stations::list(&state.pool).await?))
+}
+
+async fn get_station(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Station>> {
+    Ok(Json(stations::get(&state.pool, &id).await?))
+}
+
+async fn create_station(
+    State(state): State<AppState>,
+    Json(input): Json<StationInput>,
+) -> ApiResult<(StatusCode, Json<Station>)> {
+    let station = stations::create(&state.pool, &input).await?;
+    // A failed engine start (bad config, missing binary) must not leave the
+    // station half-created in the DB; the apply error is returned.
+    state.supervisor.apply(&station).await?;
+    Ok((StatusCode::CREATED, Json(station)))
+}
+
+async fn update_station(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(input): Json<StationInput>,
+) -> ApiResult<Json<Station>> {
+    let station = stations::update(&state.pool, &id, &input).await?;
+    // Atomic config swap: kill + respawn the engine with the new script.
+    state.supervisor.apply(&station).await?;
+    Ok(Json(station))
+}
+
+async fn delete_station(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<StatusCode> {
+    state.supervisor.stop(&id).await?;
+    stations::delete(&state.pool, &id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+struct StatusBody {
+    process: ProcessState,
+    pid: Option<u32>,
+    uptime_seconds: Option<u64>,
+    restarts: u64,
+    last_error: Option<String>,
+    playing: Option<String>,
+    engine_uptime_seconds: Option<u64>,
+    engine_ok: bool,
+    history: Vec<song_history::SongHistory>,
+}
+
+async fn station_status(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<StatusBody>> {
+    let station = stations::get(&state.pool, &id).await?;
+    let process = state.supervisor.status(&id).await;
+
+    // Poll the engine control port for live status; a dead control port is
+    // not fatal (the engine may still be starting).
+    let client = ControlClient::new(format!("http://127.0.0.1:{}", station.control_http_port));
+    let (playing, engine_uptime) = match client.status().await {
+        Ok(s) => (Some(s.playing), Some(s.uptime_seconds)),
+        Err(_) => (None, None),
+    };
+
+    Ok(Json(StatusBody {
+        process: process.state,
+        pid: process.pid,
+        uptime_seconds: process.uptime_seconds,
+        restarts: process.restarts,
+        last_error: process.last_error,
+        playing,
+        engine_uptime_seconds: engine_uptime,
+        engine_ok: engine_uptime.is_some(),
+        history: song_history::recent(&state.pool, &id, 20).await?,
+    }))
+}
+
+#[derive(Deserialize)]
+struct CmdRequest {
+    command: String,
+}
+
+async fn station_cmd(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<CmdRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let station = stations::get(&state.pool, &id).await?;
+    let client = ControlClient::new(format!("http://127.0.0.1:{}", station.control_http_port));
+    let reply = client.cmd(&req.command).await?;
+    Ok(Json(json!({ "ok": reply.ok, "message": reply.error })))
+}
+
+/// SSE stream of station events (track changes + status snapshots). The
+/// engine pushes track changes to the webhook; this endpoint fans them out
+/// to browser clients, blending in control-port status as a keepalive.
+async fn station_events(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let hub = state.hub.clone();
+    let rx = hub.subscribe(&id).await;
+
+    // First frame: current now-playing (or idle), per SSE reconnect spec.
+    let now = song_history::now_playing(&state.pool, &id).await?;
+    let initial = match now {
+        Some(h) => sse_frame(&StationEvent::Track(TrackEvent {
+            title: h.title,
+            started_at: h.started_at,
+        })),
+        None => sse_frame(&StationEvent::Status(StatusEvent {
+            state: "idle".into(),
+            playing: None,
+            uptime_seconds: None,
+        })),
+    };
+
+    let stream = BroadcastStream::new(rx).filter_map(move |res| match res {
+        Ok(ev) => Some(Ok::<_, axum::Error>(Event::default().data(sse_frame(&ev)))),
+        Err(_) => None,
+    });
+
+    Ok((
+        StatusCode::OK,
+        [
+            (CONTENT_TYPE, "text/event-stream"),
+            (CACHE_CONTROL, "no-cache"),
+            (
+                axum::http::header::HeaderName::from_static("x-accel-buffering"),
+                "no",
+            ),
+        ],
+        // Prefix the replayed current track, then live events. Status
+        // blending is done by the client polling `/status` on the SSE
+        // keepalive interval; the hub carries the authoritative events.
+        Sse::new(
+            tokio_stream::once(Ok::<_, axum::Error>(Event::default().data(initial))).chain(stream),
+        )
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
+    ))
+}
+
+async fn station_history(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Vec<song_history::SongHistory>>> {
+    Ok(Json(song_history::recent(&state.pool, &id, 50).await?))
+}
+
+/// Engine webhook receiver: `POST /api/webhooks/track?station=<id>` with a
+/// JSON body carrying the track title. The generated `crabsoup.lua` embeds
+/// the station id in the URL (the engine's `http_post` sends no headers).
+/// Records history and pushes to SSE.
+#[derive(Deserialize)]
+struct TrackPayload {
+    #[serde(default)]
+    title: String,
+}
+
+async fn track_webhook(
+    State(state): State<AppState>,
+    Query(query): Query<serde_json::Value>,
+    body: axum::body::Bytes,
+) -> ApiResult<Json<serde_json::Value>> {
+    let station_id = query
+        .get("station")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| ApiError {
+            status: StatusCode::BAD_REQUEST,
+            message: "missing ?station=<id> query parameter".into(),
+        })?;
+
+    let payload: TrackPayload = serde_json::from_slice(&body).map_err(|e| ApiError {
+        status: StatusCode::BAD_REQUEST,
+        message: format!("invalid JSON body: {e}"),
+    })?;
+
+    // The engine fires metadata hooks even when no source is active (the
+    // fallback momentarily has nothing to play); those carry empty or
+    // "(no source)" titles and are not real tracks.
+    if payload.title.trim().is_empty() || payload.title.trim() == "(no source)" {
+        return Ok(Json(json!({ "ok": true, "skipped": true })));
+    }
+    let title = payload.title;
+
+    let row = song_history::push(&state.pool, station_id, &title).await?;
+    state
+        .hub
+        .publish(
+            station_id,
+            StationEvent::Track(TrackEvent {
+                title: row.title,
+                started_at: row.started_at,
+            }),
+        )
+        .await;
+    Ok(Json(json!({ "ok": true })))
+}

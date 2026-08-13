@@ -165,17 +165,17 @@ web UI; CI green.
 
 ### Phase 1 — Control plane: Crabsoup integration (the core)
 
-- [ ] `lua/` generator: station model → `crabsoup.lua` (mounts, playlist
+- [x] `lua/` generator: station model → `crabsoup.lua` (mounts, playlist
       directory, jingles dir, harbor, sample rate, crossfade/duck settings).
       `--check` on every generation; diff + restart on change.
-- [ ] `stations/` supervisor: spawn one `crabsoup` per station, capture logs,
+- [x] `stations/` supervisor: spawn one `crabsoup` per station, capture logs,
       restart with backoff on crash, status in API (`/api/stations/:id/status`).
-- [ ] `control/` client: `/status`, `/uptime`, `/queue`, `/jingles`, `/cmd`
+- [x] `control/` client: `/status`, `/uptime`, `/queue`, `/jingles`, `/cmd`
       (`skip`, `queue.push`, `jingles.play`) with the `{"ok": ...}` envelope.
-- [ ] Track-change events: **small Crabsoup addition** — `on_metadata` webhook
+- [x] Track-change events: **small Crabsoup addition** — `on_metadata` webhook
       POST (or SSE) to the backend so song history is pushed, not polled.
       Record `now_playing` + history rows in DB.
-- [ ] Minimal station CRUD + a station dashboard page showing live status and
+- [x] Minimal station CRUD + a station dashboard page showing live status and
       now-playing over SSE.
 
 **Acceptance**: create a station in the UI, upload a playlist folder path, hear
@@ -404,7 +404,12 @@ records CPU/RAM over 10 minutes.
 
 ## 13. Known limitations (fill in as discovered)
 
-- (empty — populate from Phase 1 on)
+- The engine fires `on_metadata` with empty/`"(no source)"` titles at source
+  transitions (e.g. jingle → playlist handoff); the webhook receiver drops
+  those so history stays clean, but a silent track *with* no metadata still
+  reads as a normal entry.
+- Icecast must be reachable at apply time or the engine retries with its own
+  `reconnect`; the supervisor surfaces the crash-loop state via `last_error`.
 
 ---
 
@@ -415,6 +420,18 @@ records CPU/RAM over 10 minutes.
   UI), `docker/compose.yml` + `make dev`, GitHub Actions CI (fmt/clippy/test,
   tsc/eslint/prettier/build), README + AGENTS.md. API health is visible from
   the web home page through Next rewrites (`/api/*` → `API_UPSTREAM`).
+- **Phase 1 — Control plane: Crabsoup integration** (2026-08-14): `lua/`
+  generator (station model → `crabsoup.lua`, `--check`-gated, atomic swap),
+  `stations/` supervisor (one `crabsoup` per station, log capture, backoff
+  restart, boot start-all, graceful shutdown), `control/` client
+  (`/status`, `/uptime`, `/queue`, `/jingles`, `/cmd`), Crabsoup `http_post`
+  webhook (`on_metadata` → `POST /api/webhooks/track?station=<id>`, noise
+  filtering), `song_history` table, SSE hub + `/api/stations/:id/events`,
+  station CRUD + live dashboard (status poll + SSE now-playing + skip/jingle
+  commands) in the web app. Verified end-to-end: station created from the
+  API streams to Icecast, history records, SSE pushes track changes.
+  (Also fixed the `on_metadata(src, fn)` argument order vs the guide, and
+  corrected `dsp.md` to match.)
 
 ---
 
