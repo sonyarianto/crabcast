@@ -19,9 +19,11 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::api::AppState;
 use crate::api::error::{ApiError, ApiResult};
 use crate::api::sse::{StationEvent, StatusEvent, TrackEvent, sse_frame};
+use crate::auth::{Csrf, CurrentUser};
 use crate::control::ControlClient;
 use crate::db::song_history;
 use crate::db::stations::{self, Station, StationInput};
+use crate::db::users;
 use crate::stations::supervisor::ProcessState;
 
 pub fn routes() -> Router<AppState> {
@@ -38,12 +40,23 @@ pub fn routes() -> Router<AppState> {
         .route("/api/webhooks/track", post(track_webhook))
 }
 
-async fn list_stations(State(state): State<AppState>) -> ApiResult<Json<Vec<Station>>> {
+fn forbidden(msg: &str) -> ApiError {
+    ApiError {
+        status: StatusCode::FORBIDDEN,
+        message: msg.into(),
+    }
+}
+
+async fn list_stations(
+    State(state): State<AppState>,
+    _user: CurrentUser,
+) -> ApiResult<Json<Vec<Station>>> {
     Ok(Json(stations::list(&state.pool).await?))
 }
 
 async fn get_station(
     State(state): State<AppState>,
+    _user: CurrentUser,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Station>> {
     Ok(Json(stations::get(&state.pool, &id).await?))
@@ -51,32 +64,75 @@ async fn get_station(
 
 async fn create_station(
     State(state): State<AppState>,
+    _csrf: Csrf,
+    user: CurrentUser,
     Json(input): Json<StationInput>,
 ) -> ApiResult<(StatusCode, Json<Station>)> {
+    if !user.can_create_stations() {
+        return Err(forbidden("station_manager permission required"));
+    }
     let station = stations::create(&state.pool, &input).await?;
     // A failed engine start (bad config, missing binary) must not leave the
     // station half-created in the DB; the apply error is returned.
     state.supervisor.apply(&station).await?;
+    users::log_audit(
+        &state.pool,
+        Some(&user.user.id),
+        "station.create",
+        "stations",
+        &format!("{} ({})", station.name, station.id),
+    )
+    .await?;
     Ok((StatusCode::CREATED, Json(station)))
 }
 
 async fn update_station(
     State(state): State<AppState>,
+    _csrf: Csrf,
+    user: CurrentUser,
     Path(id): Path<String>,
     Json(input): Json<StationInput>,
 ) -> ApiResult<Json<Station>> {
+    if !user.can_manage_stations(&id) {
+        return Err(forbidden(
+            "station_manager permission required for this station",
+        ));
+    }
     let station = stations::update(&state.pool, &id, &input).await?;
     // Atomic config swap: kill + respawn the engine with the new script.
     state.supervisor.apply(&station).await?;
+    users::log_audit(
+        &state.pool,
+        Some(&user.user.id),
+        "station.update",
+        "stations",
+        &format!("{} ({})", station.name, station.id),
+    )
+    .await?;
     Ok(Json(station))
 }
 
 async fn delete_station(
     State(state): State<AppState>,
+    _csrf: Csrf,
+    user: CurrentUser,
     Path(id): Path<String>,
 ) -> ApiResult<StatusCode> {
+    if !user.can_manage_stations(&id) {
+        return Err(forbidden(
+            "station_manager permission required for this station",
+        ));
+    }
     state.supervisor.stop(&id).await?;
     stations::delete(&state.pool, &id).await?;
+    users::log_audit(
+        &state.pool,
+        Some(&user.user.id),
+        "station.delete",
+        "stations",
+        &id,
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -95,6 +151,7 @@ struct StatusBody {
 
 async fn station_status(
     State(state): State<AppState>,
+    _user: CurrentUser,
     Path(id): Path<String>,
 ) -> ApiResult<Json<StatusBody>> {
     let station = stations::get(&state.pool, &id).await?;
@@ -128,9 +185,16 @@ struct CmdRequest {
 
 async fn station_cmd(
     State(state): State<AppState>,
+    _csrf: Csrf,
+    user: CurrentUser,
     Path(id): Path<String>,
     Json(req): Json<CmdRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    if !user.can_control_station(&id) {
+        return Err(forbidden(
+            "station_manager or dj permission required for this station",
+        ));
+    }
     let station = stations::get(&state.pool, &id).await?;
     let client = ControlClient::new(format!("http://127.0.0.1:{}", station.control_http_port));
     let reply = client.cmd(&req.command).await?;
@@ -142,6 +206,7 @@ async fn station_cmd(
 /// to browser clients, blending in control-port status as a keepalive.
 async fn station_events(
     State(state): State<AppState>,
+    _user: CurrentUser,
     Path(id): Path<String>,
 ) -> ApiResult<impl IntoResponse> {
     let hub = state.hub.clone();
@@ -188,6 +253,7 @@ async fn station_events(
 
 async fn station_history(
     State(state): State<AppState>,
+    _user: CurrentUser,
     Path(id): Path<String>,
 ) -> ApiResult<Json<Vec<song_history::SongHistory>>> {
     Ok(Json(song_history::recent(&state.pool, &id, 50).await?))

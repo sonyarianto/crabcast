@@ -28,9 +28,11 @@ import {
   createStation,
   deleteStation,
   listStations,
+  logout,
   type Station,
   type StationInput,
 } from "@/lib/api";
+import { useMe } from "@/lib/use-me";
 
 type Status =
   | { state: "loading" }
@@ -98,6 +100,7 @@ const FIELDS: {
 ];
 
 export default function StationsPage() {
+  const { meState, refresh } = useMe();
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [form, setForm] = useState<StationInput>(defaultInput);
   const [saving, setSaving] = useState(false);
@@ -173,7 +176,31 @@ export default function StationsPage() {
           <Radio className="size-5" />
           Crabcast
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          {meState.state === "ready" && meState.me.user.is_super_admin && (
+            <Button variant="ghost" size="sm" render={<Link href="/users" />}>
+              Users
+            </Button>
+          )}
+          {meState.state === "ready" && (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {meState.me.user.display_name || meState.me.user.username}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await logout();
+                  refresh();
+                }}
+              >
+                Log out
+              </Button>
+            </>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">

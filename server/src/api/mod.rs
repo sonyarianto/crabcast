@@ -1,7 +1,9 @@
+pub mod auth;
 pub mod error;
 pub mod health;
 pub mod sse;
 pub mod stations;
+pub mod users;
 
 use std::sync::Arc;
 
@@ -28,6 +30,8 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor) -> Router {
     };
     Router::new()
         .merge(health::routes())
+        .merge(auth::routes())
+        .merge(users::routes())
         .merge(stations::routes())
         .with_state(state)
         .fallback(not_found)

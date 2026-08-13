@@ -183,12 +183,12 @@ it on an Icecast mount, skip a track, see now-playing update in real time.
 
 ### Phase 2 — Auth, users, roles
 
-- [ ] Session auth (argon2, secure cookies, CSRF), login/logout, change
+- [x] Session auth (argon2, secure cookies, CSRF), login/logout, change
       password, email-less first-run admin bootstrap.
-- [ ] Role/permission model (AzuraCast parity): global roles (super admin,
+- [x] Role/permission model (AzuraCast parity): global roles (super admin,
       station manager, DJ, media editor) + per-station permissions.
-- [ ] User CRUD in admin UI; invite by email later (Phase 10).
-- [ ] Audit log (who changed what) — cheap with SQLite, worth it from day one.
+- [x] User CRUD in admin UI; invite by email later (Phase 10).
+- [x] Audit log (who changed what) — cheap with SQLite, worth it from day one.
 
 **Acceptance**: two users with different station permissions behave
 accordingly; every mutation is audited.
@@ -432,6 +432,22 @@ records CPU/RAM over 10 minutes.
   API streams to Icecast, history records, SSE pushes track changes.
   (Also fixed the `on_metadata(src, fn)` argument order vs the guide, and
   corrected `dsp.md` to match.)
+
+- **Phase 2 — Auth, users, roles** (2026-08-14): argon2 password hashing,
+  `tower-sessions` SQLite-backed session cookies (14-day inactivity expiry,
+  key from `CRABCAST_SESSION_SECRET`), synchronizer-token CSRF on all
+  mutations, email-less first-run bootstrap (`/api/auth/setup` +
+  `/api/auth/bootstrap`), login/logout/password endpoints, role/permission
+  model (super admin flag + `station_manager`/`dj`/`media_editor` roles with
+  global or per-station scope via `user_roles`), station routes guarded by
+  `CurrentUser` + `Csrf` extractors with audit logging on every mutation,
+  super-admin-only user CRUD + audit log API, admin UI at `/users` (user
+  create/edit/delete, role grants, audit feed), login page with bootstrap
+  mode, `useMe` guard on station pages. Verified end-to-end: bootstrap →
+  login → CSRF-enforced station create, DJ vs scoped station manager behave
+  differently (DJ controls but cannot manage, scoped manager cannot create
+  stations), deleted users lose sessions immediately, wrong passwords
+  rejected, every mutation lands in the audit log.
 
 ---
 

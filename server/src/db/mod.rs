@@ -3,6 +3,14 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 pub mod song_history;
 pub mod stations;
+pub mod users;
+
+/// RFC3339 UTC timestamp matching the stations table's `strftime` format.
+pub fn now() -> String {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into())
+}
 
 /// Open the SQLite pool and run migrations at boot, before serving requests.
 pub async fn init(database_url: &str) -> anyhow::Result<SqlitePool> {

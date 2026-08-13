@@ -1,4 +1,5 @@
 mod api;
+mod auth;
 mod control;
 mod db;
 mod lua;
@@ -40,9 +41,10 @@ async fn main() -> anyhow::Result<()> {
     supervisor.start_all(&stations).await;
 
     let _hub = SseHub::new();
-    let app = api::router(pool, supervisor.clone())
+    let app = api::router(pool.clone(), supervisor.clone())
         .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(auth::session_layer(pool, auth::session_key()));
 
     let addr: SocketAddr = bind.parse()?;
     let listener = TcpListener::bind(addr).await?;

@@ -26,11 +26,13 @@ import { toast } from "@/components/ui/toast";
 import {
   getStation,
   getStationStatus,
+  logout,
   sendCommand,
   type SongHistory,
   type Station,
   type StationStatus,
 } from "@/lib/api";
+import { useMe } from "@/lib/use-me";
 
 const STATUS_POLL_MS = 15_000;
 
@@ -43,6 +45,7 @@ export default function StationPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
+  const { meState } = useMe();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nowPlaying, setNowPlaying] = useState<string | null>(null);
@@ -144,16 +147,31 @@ export default function StationPage() {
     }
   };
 
+  const shellProps = {
+    me:
+      meState.state === "ready"
+        ? {
+            displayName:
+              meState.me.user.display_name || meState.me.user.username,
+            isSuperAdmin: meState.me.user.is_super_admin,
+          }
+        : null,
+    onLogout: async () => {
+      await logout();
+      window.location.reload();
+    },
+  } as const;
+
   if (error && !loaded) {
     return (
-      <Shell>
+      <Shell {...shellProps}>
         <p className="text-sm text-destructive">{error}</p>
       </Shell>
     );
   }
   if (!loaded) {
     return (
-      <Shell>
+      <Shell {...shellProps}>
         <p className="text-sm text-muted-foreground">Loading…</p>
       </Shell>
     );
@@ -163,7 +181,7 @@ export default function StationPage() {
   const process = status?.process ?? "stopped";
 
   return (
-    <Shell>
+    <Shell {...shellProps}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <Link
@@ -292,7 +310,15 @@ export default function StationPage() {
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({
+  children,
+  me,
+  onLogout,
+}: {
+  children: React.ReactNode;
+  me?: { displayName: string; isSuperAdmin: boolean } | null;
+  onLogout?: () => void;
+}) {
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
@@ -300,7 +326,24 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Radio className="size-5" />
           Crabcast
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          {me?.isSuperAdmin && (
+            <Button variant="ghost" size="sm" render={<Link href="/users" />}>
+              Users
+            </Button>
+          )}
+          {me && (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {me.displayName}
+              </span>
+              <Button variant="ghost" size="sm" onClick={onLogout}>
+                Log out
+              </Button>
+            </>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         {children}

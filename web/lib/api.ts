@@ -78,12 +78,60 @@ export type SongHistory = {
   ended_at: string | null;
 };
 
+export type User = {
+  id: string;
+  username: string;
+  display_name: string;
+  is_super_admin: boolean;
+  created_at: string;
+};
+
+export type RoleGrant = {
+  role: string;
+  station_id: string | null;
+};
+
+export type UserWithRoles = User & { roles: RoleGrant[] };
+
+export type Me = {
+  user: User;
+  roles: RoleGrant[];
+  csrf_token: string;
+};
+
+export type AuditEntry = {
+  id: number;
+  user_id: string | null;
+  action: string;
+  target: string;
+  detail: string;
+  created_at: string;
+};
+
+let csrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
 async function request<T>(
   path: string,
   init?: RequestInit,
   signal?: AbortSignal,
 ): Promise<T> {
-  const res = await fetch(path, { ...init, signal });
+  const headers = new Headers(init?.headers);
+  if (init?.method && init.method !== "GET" && init.method !== "HEAD") {
+    if (!csrfToken) {
+      try {
+        const me = await fetchMe();
+        csrfToken = me.csrf_token;
+      } catch {
+        // session missing; let the request fail with a 401 and surface it
+      }
+    }
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+  }
+  const res = await fetch(path, { ...init, headers, signal });
   if (!res.ok) {
     let message = `API error: ${res.status}`;
     try {
@@ -94,6 +142,7 @@ async function request<T>(
     }
     throw new Error(message);
   }
+  if (res.status === 204) return undefined as T;
   return res.json();
 }
 
@@ -149,4 +198,98 @@ export async function sendCommand(id: string, command: string): Promise<void> {
       body: JSON.stringify({ command }),
     },
   );
+}
+
+export async function bootstrapAdmin(input: {
+  username: string;
+  password: string;
+  display_name?: string;
+}): Promise<Me> {
+  const me = await request<Me>("/api/auth/bootstrap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  setCsrfToken(me.csrf_token);
+  return me;
+}
+
+export async function login(input: {
+  username: string;
+  password: string;
+}): Promise<Me> {
+  const me = await request<Me>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  setCsrfToken(me.csrf_token);
+  return me;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await request<never>("/api/auth/logout", { method: "POST" });
+  } finally {
+    setCsrfToken(null);
+  }
+}
+
+export async function fetchMe(signal?: AbortSignal): Promise<Me> {
+  const me = await request<Me>("/api/auth/me", undefined, signal);
+  setCsrfToken(me.csrf_token);
+  return me;
+}
+
+export async function changePassword(input: {
+  current_password: string;
+  new_password: string;
+}): Promise<void> {
+  await request<never>("/api/auth/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export type UserInput = {
+  username: string;
+  password?: string;
+  display_name?: string;
+  is_super_admin?: boolean;
+  roles?: RoleGrant[];
+};
+
+export async function listUsers(signal?: AbortSignal): Promise<UserWithRoles[]> {
+  return request<UserWithRoles[]>("/api/users", undefined, signal);
+}
+
+export async function createUser(input: UserInput): Promise<UserWithRoles> {
+  return request<UserWithRoles>("/api/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateUser(
+  id: string,
+  input: UserInput,
+): Promise<UserWithRoles> {
+  return request<UserWithRoles>(`/api/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await request<never>(`/api/users/${id}`, { method: "DELETE" });
+}
+
+export async function listAudit(
+  limit = 100,
+  signal?: AbortSignal,
+): Promise<AuditEntry[]> {
+  return request<AuditEntry[]>(`/api/audit?limit=${limit}`, undefined, signal);
 }
