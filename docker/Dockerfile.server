@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+
+FROM rust:1-bookworm AS builder
+WORKDIR /build
+COPY server/Cargo.toml server/Cargo.lock ./
+COPY server/migrations ./migrations
+RUN mkdir src && echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+COPY server/src ./src
+RUN touch src/main.rs && cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /build/target/release/crabcast-server /usr/local/bin/crabcast-server
+EXPOSE 8080
+ENTRYPOINT ["crabcast-server"]

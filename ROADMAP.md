@@ -148,16 +148,16 @@ to a "Done" section at the bottom as they land.
 
 ### Phase 0 — Scaffold & dev environment
 
-- [ ] Monorepo layout: `server/` axum app, `web/` Next.js 16 + Tailwind v4 +
+- [x] Monorepo layout: `server/` axum app, `web/` Next.js 16 + Tailwind v4 +
       shadcn/ui, `docker/compose.yml` (server, web, Icecast) with one-command
       `make dev`.
-- [ ] Rust: workspace, edition 2024, `cargo fmt`/`clippy -D warnings` clean,
+- [x] Rust: workspace, edition 2024, `cargo fmt`/`clippy -D warnings` clean,
       axum health endpoint, sqlx + SQLite wired with first migration.
-- [ ] Next.js: App Router, TypeScript strict, Tailwind v4 `@theme` tokens,
+- [x] Next.js: App Router, TypeScript strict, Tailwind v4 `@theme` tokens,
       shadcn/ui base components (button, card, dialog, table, form, toast),
       dark/light toggle, font setup.
-- [ ] CI: Rust check/test/clippy + `tsc --noEmit` + ESLint + Prettier on PR.
-- [ ] README with quickstart; AGENTS.md with commands and conventions (mirror
+- [x] CI: Rust check/test/clippy + `tsc --noEmit` + ESLint + Prettier on PR.
+- [x] README with quickstart; AGENTS.md with commands and conventions (mirror
       Crabsoup's).
 
 **Acceptance**: `make dev` runs the full stack; API health visible from the
@@ -410,8 +410,11 @@ records CPU/RAM over 10 minutes.
 
 ## Done
 
-- Nothing shipped yet. When a phase lands, move its checklist here with the
-  date and actual performance numbers where applicable.
+- **Phase 0 — Scaffold & dev environment** (2026-08-14): monorepo layout
+  (`server/` axum + SQLite, `web/` Next.js 16 + Tailwind v4 + shadcn/ui Base
+  UI), `docker/compose.yml` + `make dev`, GitHub Actions CI (fmt/clippy/test,
+  tsc/eslint/prettier/build), README + AGENTS.md. API health is visible from
+  the web home page through Next rewrites (`/api/*` → `API_UPSTREAM`).
 
 ---
 
