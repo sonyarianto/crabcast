@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
@@ -37,6 +38,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/stations/{id}/cmd", post(station_cmd))
         .route("/api/stations/{id}/events", get(station_events))
         .route("/api/stations/{id}/history", get(station_history))
+        .route("/api/stations/{id}/stream", get(stream_mount))
         .route("/api/webhooks/track", post(track_webhook))
 }
 
@@ -311,4 +313,50 @@ async fn track_webhook(
         )
         .await;
     Ok(Json(json!({ "ok": true })))
+}
+
+/// Reverse-proxy the live Icecast mount so the browser plays the stream
+/// from the same origin (no mixed-content / CORS surprises). The upstream
+/// body is streamed through chunk by chunk.
+async fn stream_mount(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> ApiResult<impl IntoResponse> {
+    let station = stations::get(&state.pool, &id).await?;
+    let mount = station.icecast_mount.trim_start_matches('/');
+    let upstream = format!(
+        "http://{}:{}/{mount}",
+        station.icecast_host, station.icecast_port
+    );
+
+    let client = reqwest::Client::new();
+    let res = client
+        .get(&upstream)
+        .header("Icy-MetaData", "0")
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            status: StatusCode::BAD_GATEWAY,
+            message: format!("icecast unreachable ({upstream}): {e}"),
+        })?;
+    let status = res.status();
+    if !status.is_success() {
+        return Err(ApiError {
+            status: StatusCode::BAD_GATEWAY,
+            message: format!("icecast returned {status} for {upstream}"),
+        });
+    }
+
+    let content_type = res
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("audio/mpeg")
+        .to_string();
+    let stream = res.bytes_stream();
+    Ok((
+        StatusCode::OK,
+        [(CONTENT_TYPE, content_type)],
+        Body::from_stream(stream),
+    ))
 }

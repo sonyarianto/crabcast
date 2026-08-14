@@ -36,6 +36,11 @@ pub struct Station {
     pub icecast_bitrate: i64,
     pub icecast_source_user: String,
     pub icecast_source_password: String,
+
+    pub website: String,
+    pub facebook: String,
+    pub twitter: String,
+    pub instagram: String,
 }
 
 /// Fields a client may set when creating/updating a station.
@@ -83,6 +88,15 @@ pub struct StationInput {
     pub icecast_source_user: String,
     #[serde(default = "default_icecast_source_password")]
     pub icecast_source_password: String,
+
+    #[serde(default)]
+    pub website: String,
+    #[serde(default)]
+    pub facebook: String,
+    #[serde(default)]
+    pub twitter: String,
+    #[serde(default)]
+    pub instagram: String,
 }
 
 // Defaults mirror the migration's column defaults.
@@ -145,7 +159,8 @@ const COLUMNS: &str = "id, name, description, created_at, sample_rate, channels,
 frames_per_buffer, crossfade_seconds, fade_curve, duck_seconds, playlist_dir, \
 jingles_dir, harbor_port, harbor_mount, harbor_password, control_port, \
 control_http_port, icecast_host, icecast_port, icecast_mount, icecast_format, \
-icecast_bitrate, icecast_source_user, icecast_source_password";
+icecast_bitrate, icecast_source_user, icecast_source_password, website, facebook, \
+twitter, instagram";
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Station>, ApiError> {
     Ok(
@@ -170,8 +185,9 @@ pub async fn create(pool: &SqlitePool, input: &StationInput) -> Result<Station, 
 frames_per_buffer, crossfade_seconds, fade_curve, duck_seconds, playlist_dir, \
 jingles_dir, harbor_port, harbor_mount, harbor_password, control_port, \
 control_http_port, icecast_host, icecast_port, icecast_mount, icecast_format, \
-icecast_bitrate, icecast_source_user, icecast_source_password) \
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+icecast_bitrate, icecast_source_user, icecast_source_password, website, facebook, \
+twitter, instagram) \
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&input.name)
@@ -196,6 +212,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     .bind(input.icecast_bitrate)
     .bind(&input.icecast_source_user)
     .bind(&input.icecast_source_password)
+    .bind(&input.website)
+    .bind(&input.facebook)
+    .bind(&input.twitter)
+    .bind(&input.instagram)
     .execute(pool)
     .await?;
     get(pool, &id).await
@@ -213,6 +233,7 @@ duck_seconds = ?, playlist_dir = ?, jingles_dir = ?, harbor_port = ?, \
 harbor_mount = ?, harbor_password = ?, control_port = ?, control_http_port = ?, \
 icecast_host = ?, icecast_port = ?, icecast_mount = ?, icecast_format = ?, \
 icecast_bitrate = ?, icecast_source_user = ?, icecast_source_password = ?, \
+website = ?, facebook = ?, twitter = ?, instagram = ?, \
 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     )
     .bind(&input.name)
@@ -237,6 +258,10 @@ updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     .bind(input.icecast_bitrate)
     .bind(&input.icecast_source_user)
     .bind(&input.icecast_source_password)
+    .bind(&input.website)
+    .bind(&input.facebook)
+    .bind(&input.twitter)
+    .bind(&input.instagram)
     .bind(id)
     .execute(pool)
     .await?;

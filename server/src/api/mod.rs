@@ -1,8 +1,11 @@
 pub mod auth;
 pub mod error;
 pub mod health;
+pub mod jingles;
 pub mod media;
 pub mod playlists;
+pub mod public;
+pub mod requests;
 pub mod sse;
 pub mod stations;
 pub mod streamers;
@@ -42,6 +45,9 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
         .merge(media::routes())
         .merge(playlists::routes())
         .merge(streamers::routes())
+        .merge(requests::routes())
+        .merge(jingles::routes())
+        .merge(public::routes())
         .with_state(state)
         .fallback(not_found)
 }

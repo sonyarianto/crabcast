@@ -3,6 +3,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 pub mod media;
 pub mod playlists;
+pub mod requests;
 pub mod song_history;
 pub mod stations;
 pub mod streamers;

@@ -29,6 +29,10 @@ export type Station = {
   icecast_bitrate: number;
   icecast_source_user: string;
   icecast_source_password: string;
+  website: string;
+  facebook: string;
+  twitter: string;
+  instagram: string;
 };
 
 export type StationInput = {
@@ -54,6 +58,10 @@ export type StationInput = {
   icecast_bitrate?: number;
   icecast_source_user?: string;
   icecast_source_password?: string;
+  website?: string;
+  facebook?: string;
+  twitter?: string;
+  instagram?: string;
 };
 
 export type ProcessState = "running" | "stopped" | "failed";
@@ -440,6 +448,187 @@ export async function getStreamerConnectInfo(
   id: string,
 ): Promise<StreamerConnectInfo> {
   return request<StreamerConnectInfo>(`/api/streamers/${id}/connect`);
+}
+
+export type RequestRules = {
+  station_id: string;
+  enabled: boolean;
+  max_per_hour: number;
+  dedupe: boolean;
+  moderation: boolean;
+};
+
+export type RequestEntry = {
+  id: string;
+  station_id: string;
+  media_id: string;
+  requested_by: string | null;
+  status: "pending" | "queued" | "rejected";
+  created_at: string;
+  updated_at: string;
+  title: string;
+  artist: string;
+  filename: string;
+};
+
+export type Jingle = {
+  filename: string;
+  size_bytes: number;
+};
+
+export async function getRequestRules(
+  stationId: string,
+): Promise<RequestRules> {
+  return request<RequestRules>(`/api/stations/${stationId}/request-rules`);
+}
+
+export async function updateRequestRules(
+  stationId: string,
+  input: Omit<RequestRules, "station_id">,
+): Promise<RequestRules> {
+  return request<RequestRules>(`/api/stations/${stationId}/request-rules`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function createRequest(
+  stationId: string,
+  mediaId: string,
+): Promise<{ id: string; status: string; moderated: boolean }> {
+  return request(`/api/stations/${stationId}/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ media_id: mediaId }),
+  });
+}
+
+export async function listRequests(
+  stationId: string,
+  pendingOnly = false,
+): Promise<RequestEntry[]> {
+  return request<RequestEntry[]>(
+    `/api/stations/${stationId}/requests?pending=${pendingOnly}`,
+  );
+}
+
+export async function approveRequest(
+  stationId: string,
+  requestId: string,
+): Promise<void> {
+  await request<never>(
+    `/api/stations/${stationId}/requests/${requestId}/approve`,
+    { method: "POST" },
+  );
+}
+
+export async function rejectRequest(
+  stationId: string,
+  requestId: string,
+): Promise<void> {
+  await request<never>(
+    `/api/stations/${stationId}/requests/${requestId}/reject`,
+    { method: "POST" },
+  );
+}
+
+export async function getEngineQueue(stationId: string): Promise<string[]> {
+  const body = await request<{ queue: string[] }>(
+    `/api/stations/${stationId}/queue`,
+  );
+  return body.queue;
+}
+
+export async function clearEngineQueue(stationId: string): Promise<void> {
+  await request<never>(`/api/stations/${stationId}/queue`, {
+    method: "POST",
+  });
+}
+
+export async function skipEngineQueue(stationId: string): Promise<void> {
+  await request<never>(`/api/stations/${stationId}/queue/skip`, {
+    method: "POST",
+  });
+}
+
+export async function listJingles(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<Jingle[]> {
+  return request<Jingle[]>(
+    `/api/stations/${stationId}/jingles`,
+    undefined,
+    signal,
+  );
+}
+
+export async function uploadJingles(
+  stationId: string,
+  files: File[],
+): Promise<{ uploaded: string[] }> {
+  const form = new FormData();
+  for (const file of files) form.append("file", file);
+  return request(`/api/stations/${stationId}/jingles`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+export async function deleteJingle(
+  stationId: string,
+  filename: string,
+): Promise<void> {
+  await request<never>(
+    `/api/stations/${stationId}/jingles/${encodeURIComponent(filename)}`,
+    { method: "DELETE" },
+  );
+}
+
+export type PublicStation = {
+  id: string;
+  name: string;
+  description: string;
+  website: string;
+  facebook: string;
+  twitter: string;
+  instagram: string;
+  requests_enabled: boolean;
+  stream_url: string;
+  now: SongHistory | null;
+  history: SongHistory[];
+};
+
+export type PublicLibraryHit = {
+  id: string;
+  title: string;
+  artist: string;
+  filename: string;
+  duration_seconds: number | null;
+};
+
+export async function getPublicStation(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<PublicStation> {
+  return request<PublicStation>(
+    `/api/public/stations/${stationId}`,
+    undefined,
+    signal,
+  );
+}
+
+export async function searchPublicLibrary(
+  stationId: string,
+  q: string,
+  signal?: AbortSignal,
+): Promise<PublicLibraryHit[]> {
+  const body = await request<{ results: PublicLibraryHit[] }>(
+    `/api/public/stations/${stationId}/library?q=${encodeURIComponent(q)}`,
+    undefined,
+    signal,
+  );
+  return body.results;
 }
 
 let csrfToken: string | null = null;

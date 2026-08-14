@@ -94,9 +94,11 @@ pub fn render(
         station.control_port, station.control_http_port
     );
     let _ = writeln!(s);
+    let _ = writeln!(s, "rq = request.queue()");
+    let _ = writeln!(s);
     let _ = writeln!(
         s,
-        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, on_metadata(fallback({{j, live, pl}}), function(m) http_post({:?}, m) end))",
+        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, on_metadata(fallback({{j, live, rq, pl}}), function(m) http_post({:?}, m) end))",
         station.icecast_host,
         station.icecast_port,
         station.icecast_mount,
@@ -338,6 +340,10 @@ mod tests {
             icecast_bitrate: 128000,
             icecast_source_user: "source".into(),
             icecast_source_password: "hackme".into(),
+            website: String::new(),
+            facebook: String::new(),
+            twitter: String::new(),
+            instagram: String::new(),
         }
     }
 
@@ -372,8 +378,9 @@ mod tests {
             "output.icecast({host = \"localhost\", port = 8000, mount = \"/radio\"",
             "format = \"mp3\"",
             "http_post(\"http://localhost:8080/api/webhooks/track?station=s1\", m)",
-            "on_metadata(fallback({j, live, pl}), function(m) http_post(",
-            "fallback({j, live, pl})",
+            "rq = request.queue()",
+            "on_metadata(fallback({j, live, rq, pl}), function(m) http_post(",
+            "fallback({j, live, rq, pl})",
         ] {
             assert!(s.contains(needle), "missing {needle:?} in:\n{s}");
         }

@@ -240,12 +240,12 @@ it fades back in on disconnect — all visible in real time.
 
 ### Phase 6 — Requests & jingles
 
-- [ ] Request system: configurable request playlists + per-station request
+- [x] Request system: configurable request playlists + per-station request
       rules (max per hour, dedupe, moderation toggle); backend maps to
       `queue.push`.
-- [ ] Jingles management UI: upload, preview, trigger from admin; maps to
+- [x] Jingles management UI: upload, preview, trigger from admin; maps to
       `jingles.play`.
-- [ ] Remote control surface: skip, queue, jingles from the dashboard and
+- [x] Remote control surface: skip, queue, jingles from the dashboard and
       (later) from a mobile PWA page.
 
 **Acceptance**: a listener request plays within seconds; a jingle fires on
@@ -253,12 +253,15 @@ command; abuse rules hold.
 
 ### Phase 7 — Public pages & web player
 
-- [ ] Per-station public page (brandable): player, now-playing art, song
-      history, request form, listener count, social links.
-- [ ] Embeddable widget (iframe) for third-party sites.
-- [ ] Web player: native HTML5 audio against the mount (MP3 for max
-      compatibility; Opus mount when available); SSE-driven metadata overlay.
-- [ ] Public API endpoint for third parties (now-playing, history) — the
+- [x] Per-station public page (brandable): player, now-playing art, song
+      history, request form, listener count (deferred to Phase 8), social
+      links.
+- [x] Embeddable widget (iframe) for third-party sites.
+- [x] Web player: native HTML5 audio against the mount (MP3 for max
+      compatibility; Opus mount when available); SSE-driven metadata overlay
+      (public page polls the public now endpoint instead — SSE stays
+      auth-gated).
+- [x] Public API endpoint for third parties (now-playing, history) — the
       AzuraCast API-parity seed (full REST API in Phase 9).
 
 **Acceptance**: a visitor can play the stream, see what's on now, and request a
@@ -516,6 +519,50 @@ records CPU/RAM over 10 minutes.
   streamer re-renders the config and the old password is 401 instantly →
   DJ role reads (200) but mutations 403 → connect-info endpoint → audit
   trail → server shutdown leaves zero orphaned engines.
+
+- **Phase 6 — Requests & jingles** (2026-08-15): `request_rules`
+  (enabled, max per hour, dedupe, moderation) + `requests` log tables;
+  Lua generator renders `rq = request.queue()` into
+  `fallback({j, live, rq, pl})` so pushed requests preempt the playlist;
+  listener request API (any authenticated user) enforces the rules —
+  rate limit (429), dedupe against pending/queued + the engine queue,
+  moderation (requests land pending until a station manager approves,
+  which pushes to the engine) — and maps to the engine's `queue.push`
+  with the track's absolute library path; request history + moderation
+  inbox APIs; remote control of the engine queue (view / clear / skip,
+  `station_manager` or `dj`); jingle file management against the
+  station's jingles dir (list / multipart upload / audio preview /
+  delete, `station_manager`-gated, config re-applied so the engine
+  re-scans immediately) + `jingles.play <name>` from the dashboard.
+  Web: Requests card (rules editor, pending-approval inbox, live engine
+  queue with clear/skip, recent requests) and Jingles card (upload,
+  inline preview, fire-on-air, delete) on the station page. Verified
+  end-to-end against a live engine: request → 201 → track appears in
+  `GET /queue` and plays → duplicate 400 → rate limit 429 → moderation
+  pending → approve pushes + plays → reject drops it → jingle upload
+  re-scans the engine (playable by name) → preview 200 → delete → DJ
+  role: rules/jingles mutations 403, queue control 200 → full audit
+  trail.
+
+- **Phase 7 — Public pages & web player** (2026-08-15): stations gained
+  optional profile/social columns (website, facebook, twitter,
+  instagram), editable from a new station profile dialog; `GET
+  /api/public/stations/{id}` (no auth) returns the brand + socials +
+  requests-enabled flag + now playing + recent history + stream URL;
+  `GET /api/public/stations/{id}/library?q=` is a lightweight public
+  library search powering the request form; the listener request
+  endpoint became anonymous (rules still rate-limit); `GET
+  /api/stations/{id}/stream` reverse-proxies the Icecast mount through
+  the API (same-origin playback, chunk-streamed, graceful 502 when
+  Icecast is down); public page at `/stations/[id]/public` (HTML5
+  player against the proxy, now playing + history polled from the
+  public endpoint, request form with live search, social links) and an
+  embeddable iframe widget at `/stations/[id]/widget`; the station page
+  links to the public page. Verified end-to-end with a fake Icecast:
+  anonymous station info (socials, now playing, history) → anonymous
+  library search → anonymous request 201 → stream proxy 200 with
+  byte-identical audio and correct content-type → graceful 502 when
+  the mount is unreachable.
 
 - **Phase 2 — Auth, users, roles** (2026-08-14): argon2 password hashing,
   `tower-sessions` SQLite-backed session cookies (14-day inactivity expiry,

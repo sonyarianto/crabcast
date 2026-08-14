@@ -33,6 +33,9 @@ import {
   type StationStatus,
 } from "@/lib/api";
 import { useMe } from "@/lib/use-me";
+import { JinglesCard } from "./jingles-card";
+import { ProfileDialog } from "./profile-dialog";
+import { RequestsCard } from "./requests-card";
 import { StreamersCard } from "./streamers-card";
 
 const STATUS_POLL_MS = 15_000;
@@ -210,6 +213,21 @@ export default function StationPage() {
           <Button
             variant="outline"
             size="sm"
+            render={<Link href={`/stations/${station.id}/public`} />}
+          >
+            Public page
+          </Button>
+          <ProfileDialog
+            station={station}
+            onSaved={(updated) =>
+              setLoaded((prev) =>
+                prev ? { station: updated, status: prev.status } : prev,
+              )
+            }
+          />
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => run("skip")}
             disabled={process !== "running"}
           >
@@ -287,6 +305,10 @@ export default function StationPage() {
       </Card>
 
       <StreamersCard stationId={station.id} live={status?.live ?? false} />
+
+      <RequestsCard stationId={station.id} />
+
+      <JinglesCard stationId={station.id} />
 
       <Card className="mt-4">
         <CardHeader>
