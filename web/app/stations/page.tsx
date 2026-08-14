@@ -182,6 +182,9 @@ export default function StationsPage() {
               Users
             </Button>
           )}
+          <Button variant="ghost" size="sm" render={<Link href="/library" />}>
+            Library
+          </Button>
           {meState.state === "ready" && (
             <>
               <span className="text-sm text-muted-foreground">

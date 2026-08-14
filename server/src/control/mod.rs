@@ -29,6 +29,9 @@ pub struct Status {
     pub playing: String,
     #[serde(default)]
     pub uptime_seconds: u64,
+    /// True while a live DJ holds the harbor (playlist ducked).
+    #[serde(default)]
+    pub harbor_connected: bool,
 }
 
 impl ControlClient {

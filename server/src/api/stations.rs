@@ -146,6 +146,8 @@ struct StatusBody {
     playing: Option<String>,
     engine_uptime_seconds: Option<u64>,
     engine_ok: bool,
+    /// True while a live DJ holds the harbor; the playlist is ducked.
+    live: bool,
     history: Vec<song_history::SongHistory>,
 }
 
@@ -160,9 +162,9 @@ async fn station_status(
     // Poll the engine control port for live status; a dead control port is
     // not fatal (the engine may still be starting).
     let client = ControlClient::new(format!("http://127.0.0.1:{}", station.control_http_port));
-    let (playing, engine_uptime) = match client.status().await {
-        Ok(s) => (Some(s.playing), Some(s.uptime_seconds)),
-        Err(_) => (None, None),
+    let (playing, engine_uptime, live) = match client.status().await {
+        Ok(s) => (Some(s.playing), Some(s.uptime_seconds), s.harbor_connected),
+        Err(_) => (None, None, false),
     };
 
     Ok(Json(StatusBody {
@@ -174,6 +176,7 @@ async fn station_status(
         playing,
         engine_uptime_seconds: engine_uptime,
         engine_ok: engine_uptime.is_some(),
+        live,
         history: song_history::recent(&state.pool, &id, 20).await?,
     }))
 }

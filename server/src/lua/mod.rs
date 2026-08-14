@@ -2,15 +2,22 @@
 //!
 //! The generated script mirrors the engine's example script
 //! (`../crabsoup/crabsoup.lua.example`): the PCM bus is pinned with `set()`,
-//! sources (playlist, jingles, harbor) are wired into a `fallback`, and the
+//! sources (playlists, jingles, harbor) are wired into a `fallback`, and the
 //! result is broadcast via `output.icecast`. Every generated script must
 //! pass `crabsoup --check` before the supervisor applies it (see
 //! [`validate`]).
+//!
+//! When the station has DB playlists, the `pl` source is composed from them
+//! (per-playlist `playlist({files = ...})` with `annotate:` fade/cue
+//! overrides, dayparted `switch` for `scheduled` playlists, `rotate` with
+//! weights across concurrent playlists). With no playlists, the legacy
+//! `playlist({directory = ...})` line is emitted unchanged.
 
 use std::fmt::Write;
 use std::path::Path;
 use std::process::Command;
 
+use crate::db::playlists::PlaylistSource;
 use crate::db::stations::Station;
 
 /// Render the station's `crabsoup.lua`.
@@ -22,7 +29,12 @@ use crate::db::stations::Station;
 ///
 /// `webhook_url` is the backend's track webhook (the engine's `http_post`
 /// carries no headers, so the station id rides in the query string).
-pub fn render(station: &Station, webhook_url: &str) -> String {
+pub fn render(
+    station: &Station,
+    webhook_url: &str,
+    playlists: &[PlaylistSource],
+    streamer_passwords: &[String],
+) -> String {
     let mut s = String::new();
     let _ = writeln!(
         s,
@@ -50,11 +62,7 @@ pub fn render(station: &Station, webhook_url: &str) -> String {
         fmt_f64(station.duck_seconds)
     );
     let _ = writeln!(s);
-    let _ = writeln!(
-        s,
-        "pl = playlist({{directory = {:?}, shuffle = false, loop = true}})",
-        station.playlist_dir
-    );
+    render_playlist_sources(&mut s, playlists, &station.playlist_dir);
     let _ = writeln!(s);
     if station.jingles_dir.is_empty() {
         let _ = writeln!(s, "j = jingles({{}})");
@@ -62,9 +70,21 @@ pub fn render(station: &Station, webhook_url: &str) -> String {
         let _ = writeln!(s, "j = jingles({{directory = {:?}}})", station.jingles_dir);
     }
     let _ = writeln!(s);
+    // Per-streamer source passwords ride as extra valid harbor passwords
+    // (the engine accepts any of them); the station password stays the
+    // shared/default one.
+    let extra = if streamer_passwords.is_empty() {
+        String::new()
+    } else {
+        let quoted: Vec<String> = streamer_passwords
+            .iter()
+            .map(|p| format!("{p:?}"))
+            .collect();
+        format!(", extra_passwords = {{{}}}", quoted.join(", "))
+    };
     let _ = writeln!(
         s,
-        "live = input.harbor({{host = \"0.0.0.0\", port = {}, mount = {:?}, password = {:?}}})",
+        "live = input.harbor({{host = \"0.0.0.0\", port = {}, mount = {:?}, password = {:?}{extra}}})",
         station.harbor_port, station.harbor_mount, station.harbor_password
     );
     let _ = writeln!(s);
@@ -90,6 +110,155 @@ pub fn render(station: &Station, webhook_url: &str) -> String {
     );
     let _ = writeln!(s);
     s
+}
+
+/// Emit the `pl` source: either the legacy directory playlist (no DB
+/// playlists) or a composition of the station's playlists:
+///
+/// - each enabled playlist becomes `pl{i} = playlist({files = {...}, shuffle, loop})`;
+/// - per-track overrides are baked in as `annotate:` prefixes;
+/// - `scheduled` playlists are wrapped in a `switch` using their schedule
+///   rules (day names + HH:MM windows), with the fallback child being the
+///   other playlists (or the legacy directory playlist when no DB playlist
+///   is enabled — a scheduled-only station still needs an on-air default);
+/// - multiple always-on playlists are combined with `rotate` + weights;
+/// - `once_per_hour` playlists are joined with `rotate` weights too (the
+///   engine has no per-hour primitive; the schedule window approximates it).
+pub fn render_playlist_sources(s: &mut String, playlists: &[PlaylistSource], fallback_dir: &str) {
+    let enabled: Vec<&PlaylistSource> = playlists.iter().filter(|p| !p.files.is_empty()).collect();
+
+    if enabled.is_empty() {
+        let _ = writeln!(
+            s,
+            "pl = playlist({{directory = {:?}, shuffle = false, loop = true}})",
+            fallback_dir
+        );
+        return;
+    }
+
+    // One playlist() source per DB playlist.
+    for (i, p) in enabled.iter().enumerate() {
+        let shuffle = if p.kind == "looping" {
+            "false"
+        } else if p.shuffle {
+            "true"
+        } else {
+            "false"
+        };
+        let files: Vec<String> = p
+            .files
+            .iter()
+            .map(|(path, fade_in, fade_out, cue_in, cue_out)| {
+                annotate_path(path, *fade_in, *fade_out, *cue_in, *cue_out)
+            })
+            .collect();
+        let _ = writeln!(
+            s,
+            "pl{i} = playlist({{files = {{{}}}, shuffle = {shuffle}, loop = true}})",
+            files.join(", ")
+        );
+    }
+
+    // Always-on children: standard/looping playlists, plus once_per_hour
+    // (they rotate like any other; a per-hour schedule is approximated by
+    // the `scheduled` switch below, see comments).
+    let always: Vec<usize> = enabled
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.kind != "scheduled")
+        .map(|(i, _)| i)
+        .collect();
+
+    let scheduled: Vec<usize> = enabled
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.kind == "scheduled")
+        .map(|(i, _)| i)
+        .collect();
+
+    // Build the base (non-scheduled) composition: rotate with weights when
+    // more than one playlist, otherwise the single source.
+    let base = match always.len() {
+        0 => "mksafe(blank())".to_string(),
+        1 => format!("pl{}", always[0]),
+        _ => {
+            let names: Vec<String> = always.iter().map(|i| format!("pl{i}")).collect();
+            let weights: Vec<String> = always
+                .iter()
+                .map(|i| format!("{}", enabled[*i].weight.max(1)))
+                .collect();
+            format!(
+                "rotate({{{}}}, {{weights = {{{}}}}})",
+                names.join(", "),
+                weights.join(", ")
+            )
+        }
+    };
+
+    if scheduled.is_empty() {
+        let _ = writeln!(s, "pl = {base}");
+        return;
+    }
+
+    // Dayparting: a switch whose slots are the scheduled playlists' rules
+    // and whose default child is the base composition.
+    let mut slots: Vec<String> = Vec::new();
+    for &i in &scheduled {
+        let src = format!("pl{i}");
+        let p = enabled[i];
+        for sch in &p.schedules {
+            let days = if sch.days.trim().is_empty() {
+                String::new()
+            } else {
+                let names: Vec<String> = sch
+                    .days
+                    .split(',')
+                    .map(|d| d.trim().to_string())
+                    .filter(|d| !d.is_empty())
+                    .map(|d| format!("{d:?}"))
+                    .collect();
+                format!("days = {{{}}}, ", names.join(", "))
+            };
+            slots.push(format!(
+                "{{when = {{{days}from = {:?}, to = {:?}}}, src = {src}}}",
+                sch.start_time, sch.end_time
+            ));
+        }
+    }
+    slots.push(format!("{{src = {base}}}"));
+    let _ = writeln!(s, "pl = switch({{{}}})", slots.join(", "));
+}
+
+/// Prefix a file path with its `annotate:` fade/cue overrides, if any.
+/// Quoted values match the engine's `parse_annotate` expectations.
+fn annotate_path(
+    path: &str,
+    fade_in: Option<f64>,
+    fade_out: Option<f64>,
+    cue_in: Option<f64>,
+    cue_out: Option<f64>,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(v) = cue_in {
+        parts.push(format!("liq_cue_in=\"{}\"", fmt_f64(v)));
+    }
+    if let Some(v) = cue_out {
+        parts.push(format!("liq_cue_out=\"{}\"", fmt_f64(v)));
+    }
+    if let Some(v) = fade_in {
+        parts.push(format!("liq_fade_in=\"{}\"", fmt_f64(v)));
+    }
+    if let Some(v) = fade_out {
+        parts.push(format!("liq_fade_out=\"{}\"", fmt_f64(v)));
+    }
+    if parts.is_empty() {
+        format!("{path:?}")
+    } else {
+        // The annotate prefix and path are one Lua string value; `:?`
+        // quotes/escapes the whole thing so the value carries the prefix
+        // plus the raw path (no stray quotes around the URI).
+        format!("{:?}", format!("annotate:{}:{path}", parts.join(",")))
+    }
 }
 
 /// Render a float the way Lua accepts it (never a bare integer like `3`,
@@ -141,6 +310,7 @@ pub fn validate(script: &str, bin: &Path) -> anyhow::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::playlists::{PlaylistSchedule, PlaylistSource};
 
     fn station() -> Station {
         Station {
@@ -171,9 +341,27 @@ mod tests {
         }
     }
 
+    fn source(kind: &str, files: &[&str]) -> PlaylistSource {
+        PlaylistSource {
+            kind: kind.into(),
+            shuffle: false,
+            weight: 1,
+            files: files
+                .iter()
+                .map(|f| (f.to_string(), None, None, None, None))
+                .collect(),
+            schedules: vec![],
+        }
+    }
+
     #[test]
     fn render_contains_all_key_sections() {
-        let s = render(&station(), "http://localhost:8080/api/webhooks/track");
+        let s = render(
+            &station(),
+            "http://localhost:8080/api/webhooks/track",
+            &[],
+            &[],
+        );
         for needle in [
             "set(\"sample_rate\", 44100)",
             "set(\"crossfade_seconds\", 3.0)",
@@ -195,8 +383,113 @@ mod tests {
     fn empty_jingles_dir_renders_an_empty_jingles_source() {
         let mut st = station();
         st.jingles_dir = String::new();
-        let s = render(&st, "");
+        let s = render(&st, "", &[], &[]);
         assert!(s.contains("j = jingles({})"), "{s}");
+    }
+
+    #[test]
+    fn streamer_passwords_are_rendered_as_harbor_extras() {
+        let s = render(
+            &station(),
+            "",
+            &[],
+            &["sarah-secret".to_string(), "mj-pw".to_string()],
+        );
+        assert!(
+            s.contains(
+                "live = input.harbor({host = \"0.0.0.0\", port = 8005, mount = \"/live\", password = \"dj\", extra_passwords = {\"sarah-secret\", \"mj-pw\"}})"
+            ),
+            "{s}"
+        );
+        // No streamers → no extra_passwords key at all.
+        let plain = render(&station(), "", &[], &[]);
+        assert!(!plain.contains("extra_passwords"), "{plain}");
+    }
+
+    #[test]
+    fn empty_playlists_fall_back_to_directory() {
+        let s = render_playlist_sources_string(&[]);
+        assert!(
+            s.contains("pl = playlist({directory = \"/media/test\""),
+            "{s}"
+        );
+    }
+
+    #[test]
+    fn single_playlist_renders_files_source() {
+        let pl = vec![source("standard", &["/media/a.mp3", "/media/b.mp3"])];
+        let s = render_playlist_sources_string(&pl);
+        assert!(
+            s.contains("pl0 = playlist({files = {\"/media/a.mp3\", \"/media/b.mp3\"}"),
+            "{s}"
+        );
+        assert!(s.contains("shuffle = false, loop = true"), "{s}");
+        assert!(s.contains("pl = pl0"), "{s}");
+    }
+
+    #[test]
+    fn annotate_overrides_are_embedded() {
+        let pl = vec![PlaylistSource {
+            kind: "standard".into(),
+            shuffle: true,
+            weight: 1,
+            files: vec![(
+                "/media/a.mp3".into(),
+                Some(2.0),
+                Some(3.0),
+                Some(0.5),
+                Some(180.0),
+            )],
+            schedules: vec![],
+        }];
+        let s = render_playlist_sources_string(&pl);
+        // The annotate prefix is one Lua string literal, so the quotes are
+        // escaped in the emitted source; crabsoup unescapes on parse.
+        assert!(
+            s.contains(
+                "annotate:liq_cue_in=\\\"0.5\\\",liq_cue_out=\\\"180.0\\\",liq_fade_in=\\\"2.0\\\",liq_fade_out=\\\"3.0\\\":/media/a.mp3"
+            ),
+            "{s}"
+        );
+        assert!(s.contains("shuffle = true"), "{s}");
+    }
+
+    #[test]
+    fn multiple_playlists_rotate_with_weights() {
+        let pl = vec![
+            source("standard", &["/media/a.mp3"]),
+            source("looping", &["/media/b.mp3"]),
+        ];
+        let s = render_playlist_sources_string(&pl);
+        assert!(s.contains("rotate({pl0, pl1}, {weights = {1, 1}})"), "{s}");
+        assert!(s.contains("pl = rotate({pl0, pl1}"), "{s}");
+    }
+
+    #[test]
+    fn scheduled_playlist_renders_switch_with_default() {
+        let mut p = source("scheduled", &["/media/morning.mp3"]);
+        p.schedules = vec![PlaylistSchedule {
+            id: "sch1".into(),
+            days: "mon,tue".into(),
+            start_time: "09:00".into(),
+            end_time: "17:00".into(),
+        }];
+        let s = render_playlist_sources_string(&[p]);
+        assert!(
+            s.contains(
+                "{when = {days = {\"mon\", \"tue\"}, from = \"09:00\", to = \"17:00\"}, src = pl0}"
+            ),
+            "{s}"
+        );
+        // A scheduled-only station still gets an on-air default.
+        assert!(s.contains("{src = mksafe(blank())}"), "{s}");
+        assert!(s.contains("pl = switch({"), "{s}");
+    }
+
+    fn render_playlist_sources_string(playlists: &[PlaylistSource]) -> String {
+        let mut s = String::new();
+        render_playlist_sources(&mut s, playlists, "/media/test");
+        s
     }
 
     #[test]

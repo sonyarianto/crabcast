@@ -1,8 +1,11 @@
 pub mod auth;
 pub mod error;
 pub mod health;
+pub mod media;
+pub mod playlists;
 pub mod sse;
 pub mod stations;
+pub mod streamers;
 pub mod users;
 
 use std::sync::Arc;
@@ -12,6 +15,7 @@ use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 use crate::api::sse::SseHub;
+use crate::media::Storage;
 use crate::stations::supervisor::Supervisor;
 
 /// Shared app state for every route module.
@@ -20,19 +24,24 @@ pub struct AppState {
     pub pool: SqlitePool,
     pub supervisor: Supervisor,
     pub hub: Arc<SseHub>,
+    pub storage: Arc<dyn Storage>,
 }
 
-pub fn router(pool: SqlitePool, supervisor: Supervisor) -> Router {
+pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage>) -> Router {
     let state = AppState {
         pool,
         supervisor,
         hub: Arc::new(SseHub::new()),
+        storage,
     };
     Router::new()
         .merge(health::routes())
         .merge(auth::routes())
         .merge(users::routes())
         .merge(stations::routes())
+        .merge(media::routes())
+        .merge(playlists::routes())
+        .merge(streamers::routes())
         .with_state(state)
         .fallback(not_found)
 }

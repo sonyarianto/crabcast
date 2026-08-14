@@ -33,6 +33,7 @@ import {
   type StationStatus,
 } from "@/lib/api";
 import { useMe } from "@/lib/use-me";
+import { StreamersCard } from "./streamers-card";
 
 const STATUS_POLL_MS = 15_000;
 
@@ -202,6 +203,13 @@ export default function StationPage() {
           <Button
             variant="outline"
             size="sm"
+            render={<Link href={`/stations/${station.id}/playlists`} />}
+          >
+            Playlists
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => run("skip")}
             disabled={process !== "running"}
           >
@@ -240,6 +248,12 @@ export default function StationPage() {
                 }`}
               />
               <span className="text-sm font-medium">{process}</span>
+              {status?.live && (
+                <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+                  <span className="size-1.5 rounded-full bg-current" />
+                  LIVE — DJ on air, playlist ducked
+                </span>
+              )}
             </div>
             <div className="text-sm">
               <span className="text-muted-foreground">pid </span>
@@ -272,7 +286,9 @@ export default function StationPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <StreamersCard stationId={station.id} live={status?.live ?? false} />
+
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle className="text-base">Recent history</CardTitle>
           <CardDescription>
@@ -332,6 +348,9 @@ function Shell({
               Users
             </Button>
           )}
+          <Button variant="ghost" size="sm" render={<Link href="/library" />}>
+            Library
+          </Button>
           {me && (
             <>
               <span className="text-sm text-muted-foreground">

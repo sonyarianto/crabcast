@@ -6,8 +6,6 @@ use sqlx::SqlitePool;
 
 pub const ROLE_STATION_MANAGER: &str = "station_manager";
 pub const ROLE_DJ: &str = "dj";
-/// Used from Phase 4 (media library) onwards.
-#[allow(dead_code)]
 pub const ROLE_MEDIA_EDITOR: &str = "media_editor";
 
 /// Full user row; password hash is never serialized.

@@ -18,6 +18,13 @@ impl ApiError {
             message: format!("{kind} {id:?} not found"),
         }
     }
+
+    pub fn bad_request(message: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            message: message.into(),
+        }
+    }
 }
 
 impl std::fmt::Display for ApiError {

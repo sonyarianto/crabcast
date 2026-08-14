@@ -195,38 +195,44 @@ accordingly; every mutation is audited.
 
 ### Phase 3 — Media library
 
-- [ ] Upload (drag & drop, resumable chunks), storage trait (local FS now,
-      S3 later), dedupe by content hash.
-- [ ] Tag scan: title/artist/album/genre, duration, cover art, replaygain tags
-      (the engine reads these — surface them). Tag editing writes back.
-- [ ] Waveform + audio preview in the browser (no download-to-check).
-- [ ] Search + filters + virtualized list; bulk edit; "add to playlist" from
-      results.
-- [ ] Library page with column sorting and cover-art grid toggle.
+- [x] Upload (drag & drop; resumable chunks deferred — see Known
+      limitations), storage trait (local FS now, S3 later), dedupe by
+      content hash (sha256).
+- [x] Tag scan: title/artist/album/genre, duration, cover art, replaygain tags
+      (the engine reads these — surface them). Tag editing writes back to
+      the file.
+- [x] Waveform (peaks computed on upload, rendered in the preview player) +
+      audio preview in the browser (Range-enabled `/stream`).
+- [x] Search + filters (artist/album/genre facets) + server-side sort and
+      pagination; "add to playlist" from results lands with Phase 4
+      playlists; bulk edit deferred.
+- [x] Library page with column sorting and cover-art grid/list toggle.
 
 **Acceptance**: upload 1,000 tracks, browse/filter/edit them at p95 < 50 ms,
 attach a folder to a station playlist and hear it on air.
 
 ### Phase 4 — Playlists & scheduling (AutoDJ)
 
-- [ ] Playlist types: standard (shuffle/sequential), looping, scheduled
-      (dayparted), once-per-hour (AzuraCast parity), request playlist.
-- [ ] Drag-and-drop ordering, per-playlist weights, per-track fade/cue
+- [x] Playlist types: standard (shuffle/sequential), looping, scheduled
+      (dayparted), once-per-hour (AzuraCast parity), request playlist
+      (request playlist deferred — lands with the Phase 6 request system).
+- [x] Drag-and-drop ordering, per-playlist weights, per-track fade/cue
       overrides (maps to Crabsoup `cue_cut`/`annotate:`).
-- [ ] Scheduler UI: time-of-day + weekday rules → Crabsoup `switch`/`rotate`
+- [x] Scheduler UI: time-of-day + weekday rules → Crabsoup `switch`/`rotate`
       generation with live preview of the generated Lua.
-- [ ] Crossfade/ducking/DSP station settings mapped to Crabsoup `set()` knobs
-      and `normalize(replaygain(...))`.
+- [x] Crossfade/ducking/DSP station settings mapped to Crabsoup `set()` knobs
+      (landed with the Phase 2 station model; `normalize(replaygain(...))`
+      deferred — the library surfaces replaygain tags for a future pass).
 
 **Acceptance**: a station with dayparting + crossfades runs unattended for 24 h
 with a correct schedule; changing a rule applies live without dropping audio.
 
 ### Phase 5 — Streamers (live DJ)
 
-- [ ] Streamer accounts + mount config (`input.harbor` source password).
-- [ ] Connection tracking (on-air/off-air via harbor state), on-air indicator
+- [x] Streamer accounts + mount config (`input.harbor` source password).
+- [x] Connection tracking (on-air/off-air via harbor state), on-air indicator
       in the dashboard, ducking visualization.
-- [ ] Streamer-facing view: connect instructions (Icecast source client),
+- [x] Streamer-facing view: connect instructions (Icecast source client),
       mic test, disconnect.
 
 **Acceptance**: a DJ connects from a source client, the playlist ducks out, and
@@ -410,6 +416,10 @@ records CPU/RAM over 10 minutes.
   reads as a normal entry.
 - Icecast must be reachable at apply time or the engine retries with its own
   `reconnect`; the supervisor surfaces the crash-loop state via `last_error`.
+- Phase 3 uploads are single-request multipart (whole file in memory per
+  request); resumable chunked upload is deferred — fine for typical library
+  sizes, revisit before large-live-set workflows. Storage is local FS only;
+  the `Storage` trait is the seam for S3 later.
 
 ---
 
@@ -432,6 +442,80 @@ records CPU/RAM over 10 minutes.
   API streams to Icecast, history records, SSE pushes track changes.
   (Also fixed the `on_metadata(src, fn)` argument order vs the guide, and
   corrected `dsp.md` to match.)
+
+- **Phase 3 — Media library** (2026-08-14): `media_files` table + indexes;
+  `Storage` trait + `LocalStorage` (files sharded by content-hash prefix
+  under `CRABCAST_MEDIA_DIR`); upload via multipart with sha256 dedupe
+  (duplicates skipped and reported); lofty tag scan (title/artist/album/
+  genre, duration, sample rate/channels/bitrate, replaygain, embedded cover
+  art) + symphonia waveform peaks (256 buckets); search (`q` across
+  title/artist/album/filename) + artist/album/genre facet filters + sort +
+  pagination with total count; Range-enabled audio streaming via
+  `ServeFile`; tag editing that writes back into the file itself;
+  delete removes DB row + files; `media_editor` role wired (super admin,
+  global station_manager, or global media_editor can mutate; any
+  authenticated user can browse); audit logging on every mutation;
+  `/api/media/config` exposes the storage root so users can point a
+  station's playlist dir at the library. Verified end-to-end against a live
+  server: upload → dedupe → scan (duration/waveform/bitrate) → search +
+  filters → 206 range stream → tag write-back (ID3 chunk physically present
+  in the file) → DJ user blocked from upload/delete (403) but can list →
+  delete removes file + row → audit trail. Web: `/library` page with
+  drag & drop upload, debounced search, facet dropdowns, sortable table
+  with cover thumbs, cover-art grid toggle, sticky preview player with
+  waveform + `<audio>`, tag edit dialog, pagination; Library nav link added
+  to the Stations headers.
+
+- **Phase 4 — Playlists & scheduling (AutoDJ)** (2026-08-14): `playlists`,
+  `playlist_tracks` (ordered, per-track `fade_in`/`fade_out`/`cue_in`/
+  `cue_out` overrides), `playlist_schedules` (weekday + HH:MM daypart
+  rules); kinds `standard`/`looping`/`scheduled`/`once_per_hour` with
+  per-playlist `weight`; Lua generator renders one `playlist({files = {...}})`
+  per playlist (shuffle/loop), `annotate:` prefixes for per-track
+  fade/cue overrides, `rotate` + weights for multiple always-on playlists,
+  and a `switch` for dayparted schedules with the other playlists as
+  fallback; legacy `directory` fallback kept when no playlist is enabled;
+  every mutation re-renders + `--check`s + restarts the station engine, so
+  changes apply live; `/api/stations/:id/playlists/preview` returns the
+  generated Lua; CRUD + track add/remove/reorder + override update +
+  schedule add/remove, all gated on `station_manager` for the station with
+  audit logging. Web: `/stations/[id]/playlists` page — playlist list,
+  create/edit/delete dialogs, kind/weight/shuffle toggles, track picker
+  with a live library search, drag-and-drop reorder, per-track fade/cue
+  edit, daypart schedule rows, and a Lua preview panel; link added to the
+  station detail page. Verified end-to-end against a live server (real
+  crabsoup `--check`): create station → upload tracks → create playlists →
+  add tracks → preview Lua (annotate prefixes + `switch` daypart render
+  correctly) → track reorder → DJ user reads (200) but mutations are 403 →
+  schedule/track/playlist deletion re-applies config to disk → full audit
+  trail.
+
+- **Phase 5 — Streamers (live DJ)** (2026-08-15): `streamers` table
+  (per-DJ account with its own source password, enabled flag for instant
+  revocation); engine extended (sibling `crabsoup` repo): `input.harbor`
+  accepts `extra_passwords = {...}` (any of them authenticates) and
+  `harbor_connected` is shared into the status handle so `GET /status`
+  reports whether a DJ is on air; Lua generator renders the station
+  password plus every enabled streamer's password; `streamers` CRUD API
+  (`station_manager`-gated, audit-logged, config re-applied live on every
+  mutation) + `/api/streamers/:id/connect` returning the mount URL,
+  per-DJ credentials and a copy-paste `curl` mic test; station status now
+  carries `live` (harbor held = playlist ducked); dashboard shows a
+  pulsing LIVE badge + ducked banner, and a Streamers card with
+  create/edit/delete and per-account connect-instructions dialog. Also
+  fixed a supervisor bug found during verification: the watchdog claimed
+  the child immediately and blocked on `wait()`, so `stop()` on re-apply
+  could never kill the old engine — every mutation leaked a process that
+  held the control/harbor ports. The watchdog now polls `try_wait()` + a
+  stop flag and kills the child it owns, and `stop()` waits for the pid
+  to actually exit before `spawn()` runs (re-applies are atomic, no port
+  races). Verified end-to-end against a live engine: streamer created →
+  config on disk carries `extra_passwords = {"sarah-secret", ...}` →
+  wrong password 401 → DJ PUT accepted → `harbor_connected: true` /
+  `live: true` while connected → `false` after disconnect → disabling a
+  streamer re-renders the config and the old password is 401 instantly →
+  DJ role reads (200) but mutations 403 → connect-info endpoint → audit
+  trail → server shutdown leaves zero orphaned engines.
 
 - **Phase 2 — Auth, users, roles** (2026-08-14): argon2 password hashing,
   `tower-sessions` SQLite-backed session cookies (14-day inactivity expiry,

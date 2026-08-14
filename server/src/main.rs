@@ -3,9 +3,11 @@ mod auth;
 mod control;
 mod db;
 mod lua;
+mod media;
 mod stations;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
@@ -13,6 +15,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
 use crate::api::sse::SseHub;
+use crate::media::LocalStorage;
 use crate::stations::supervisor::Supervisor;
 
 #[tokio::main]
@@ -29,11 +32,13 @@ async fn main() -> anyhow::Result<()> {
     let bind = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
     let data_dir =
         std::env::var("CRABCAST_DATA_DIR").unwrap_or_else(|_| "station-data".to_string());
+    let media_dir = std::env::var("CRABCAST_MEDIA_DIR").unwrap_or_else(|_| "media".to_string());
 
     tracing::info!(%database_url, "connecting to database");
     let pool = db::init(&database_url).await?;
 
-    let supervisor = Supervisor::new(data_dir, pool.clone());
+    let supervisor = Supervisor::new(data_dir, media_dir.clone(), pool.clone());
+    let storage: Arc<dyn media::Storage> = Arc::new(LocalStorage::new(media_dir.into()));
 
     // Boot: start every station's engine (best-effort; logs failures).
     let stations = db::stations::list(&pool).await?;
@@ -41,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
     supervisor.start_all(&stations).await;
 
     let _hub = SseHub::new();
-    let app = api::router(pool.clone(), supervisor.clone())
+    let app = api::router(pool.clone(), supervisor.clone(), storage)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .layer(auth::session_layer(pool, auth::session_key()));

@@ -26,6 +26,13 @@ use crate::lua;
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// Initial backoff before the first respawn.
 const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
+/// Watchdog poll interval for child exit status + stop flag.
+const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// True while a process with this pid exists (Linux `/proc`).
+fn pid_exists(pid: u32) -> bool {
+    std::path::Path::new(&format!("/proc/{pid}")).exists()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -67,6 +74,8 @@ pub struct Supervisor {
     /// Directory holding per-station `configs/<id>/crabsoup.lua` and
     /// `logs/<id>.log`.
     base_dir: PathBuf,
+    /// Media storage root (files live under it, sharded by hash prefix).
+    media_root: PathBuf,
     crabsoup_bin: PathBuf,
     webhook_url: Option<String>,
     pool: sqlx::SqlitePool,
@@ -74,14 +83,20 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
-    pub fn new(base_dir: impl Into<PathBuf>, pool: sqlx::SqlitePool) -> Self {
+    pub fn new(
+        base_dir: impl Into<PathBuf>,
+        media_root: impl Into<PathBuf>,
+        pool: sqlx::SqlitePool,
+    ) -> Self {
         let base_dir = base_dir.into();
+        let media_root = media_root.into();
         let crabsoup_bin = std::env::var("CRABSOUP_BIN")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("crabsoup"));
         let webhook_url = std::env::var("CRABCAST_WEBHOOK_URL").ok();
         Self {
             base_dir,
+            media_root,
             crabsoup_bin,
             webhook_url,
             pool,
@@ -103,7 +118,13 @@ impl Supervisor {
             .webhook_url
             .as_deref()
             .unwrap_or("http://localhost:8080/api/webhooks/track");
-        let script = lua::render(station, webhook);
+        // Playlist sources (absolute media paths) feed the Lua generator;
+        // enabled streamers contribute per-DJ harbor source passwords.
+        let playlists =
+            crate::db::playlists::sources(&self.pool, &station.id, &self.media_root).await?;
+        let streamer_passwords =
+            crate::db::streamers::enabled_passwords(&self.pool, &station.id).await?;
+        let script = lua::render(station, webhook, &playlists, &streamer_passwords);
 
         // Validate before touching anything.
         lua::validate(&script, &self.crabsoup_bin).map_err(|e| {
@@ -172,11 +193,24 @@ impl Supervisor {
                         None => return,
                     }
                 };
-                let status = child.wait().await;
-                if handle.stop.load(Ordering::SeqCst) {
-                    tracing::info!("station {id}: stopped by supervisor");
-                    return;
-                }
+                // Poll the exit status instead of blocking on `wait()`:
+                // `stop()` can only kill a child still in the registry, but
+                // once claimed here the watchdog owns it, so it must honor
+                // the stop flag itself and kill before returning — otherwise
+                // every re-apply leaks an old engine holding the ports.
+                let status = loop {
+                    if handle.stop.load(Ordering::SeqCst) {
+                        let _ = child.kill().await;
+                        let _ = child.wait().await;
+                        tracing::info!("station {id}: stopped by supervisor");
+                        return;
+                    }
+                    match child.try_wait() {
+                        Ok(Some(st)) => break Ok(st),
+                        Ok(None) => sleep(POLL_INTERVAL).await,
+                        Err(e) => break Err(e),
+                    }
+                };
                 let code = match status {
                     Ok(s) => s
                         .code()
@@ -287,14 +321,28 @@ impl Supervisor {
         }
     }
 
-    /// Stop the engine for a station (no respawn).
+    /// Stop the engine for a station (no respawn). Waits until the process
+    /// is actually gone so a following `spawn()` never races it for the
+    /// control/harbor ports.
     pub async fn stop(&self, id: &str) -> anyhow::Result<()> {
         let mut reg = self.registry.lock().await;
         if let Some(handle) = reg.processes.remove(id) {
             handle.stop.store(true, Ordering::SeqCst);
+            let pid = handle.pid;
             if let Some(mut child) = reg.children.remove(id) {
                 let _ = child.kill().await;
                 let _ = child.wait().await;
+            } else {
+                // The watchdog took the child and kills it on its next poll;
+                // wait for it so the ports are free when we return.
+                drop(reg);
+                for _ in 0..40 {
+                    if !pid_exists(pid) {
+                        return Ok(());
+                    }
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                tracing::warn!("station {id}: engine pid {pid} did not exit within timeout");
             }
         }
         Ok(())

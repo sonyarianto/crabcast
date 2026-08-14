@@ -1,8 +1,11 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+pub mod media;
+pub mod playlists;
 pub mod song_history;
 pub mod stations;
+pub mod streamers;
 pub mod users;
 
 /// RFC3339 UTC timestamp matching the stations table's `strftime` format.

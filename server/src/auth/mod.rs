@@ -76,6 +76,17 @@ impl CurrentUser {
             || self.has_role(users::ROLE_STATION_MANAGER, station_id)
             || self.has_role(users::ROLE_DJ, station_id)
     }
+
+    /// Upload/edit/delete media library files: super admin, a global
+    /// station_manager, or a global media_editor. Media is a single global
+    /// library in this phase (per-station scoping arrives with playlists).
+    pub fn can_manage_media(&self) -> bool {
+        self.is_super_admin()
+            || self.grants.iter().any(|g| {
+                (g.role == users::ROLE_MEDIA_EDITOR || g.role == users::ROLE_STATION_MANAGER)
+                    && g.station_id.is_none()
+            })
+    }
 }
 
 impl FromRequestParts<AppState> for CurrentUser {
