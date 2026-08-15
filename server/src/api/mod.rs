@@ -14,6 +14,7 @@ pub mod stations;
 pub mod streamers;
 pub mod tokens;
 pub mod users;
+pub mod webhooks;
 
 use std::sync::Arc;
 
@@ -55,6 +56,7 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
         .merge(tokens::routes())
         .merge(requests::routes())
         .merge(jingles::routes())
+        .merge(webhooks::routes())
         .merge(public::routes())
         .with_state(state)
         .fallback(not_found)

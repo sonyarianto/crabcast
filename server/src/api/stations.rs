@@ -139,6 +139,10 @@ async fn delete_station(
         ));
     }
     state.supervisor.stop(&id).await?;
+    // The supervisor's watchdog also fires "stopped", but it races the
+    // delete below (webhook rows cascade with the station), so fire it here
+    // while the station still exists.
+    crate::notify::station_event(&state.pool, &id, "stopped").await;
     stations::delete(&state.pool, &id).await?;
     users::log_audit(
         &state.pool,

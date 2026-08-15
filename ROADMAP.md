@@ -321,7 +321,7 @@ install script; backup → restore verified in CI.
 - [ ] Built-in mount server (skip Icecast) — only after Phase 8/9 listener
       metrics justify the engine work; this is the biggest lever for the
       "better performance" claim but also the biggest risk, so it stays last.
-- [ ] Plugins/webhooks out (Slack/Discord on-air notifications, etc.).
+- [x] Webhooks out (Slack/Discord on-air notifications).
 
 ## 7. Performance targets (SLOs)
 
@@ -660,6 +660,28 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   engine: segments written and rolling (EXTM3U + `#EXT-X-MEDIA-SEQUENCE`,
   AAC 44100 stereo), playlist + segment served with the right content
   types, traversal rejected, disable → 404, empty dir → 400. 59 Rust
+  tests, clippy clean, web tsc/lint/build clean.
+
+- **Phase 11 — Webhooks out (Slack/Discord on-air notifications)**
+  (2026-08-15): per-station notification webhooks. Migration
+  `0014_notification_webhooks` (url, `events` = `*` or
+  `started,stopped,crashed,blank`, enabled; cascade on station delete);
+  `db/notification_webhooks.rs` CRUD + `for_event` lookup with events
+  validation (400 on unknown events); `api/webhooks.rs` —
+  station-manager-gated `GET/POST /api/stations/{id}/webhooks` +
+  `DELETE /api/webhooks/{id}`, audit-logged. Dispatch lives in
+  `notify.rs`: `station_event(pool, id, event)` loads subscribed webhooks
+  and POSTs one payload with `text` (Slack), `content` (Discord), and
+  `event` keys (each service ignores the other's field; 5s timeout,
+  failures logged only). Events fire from the supervisor (`started` after
+  spawn, `stopped` on the stop path, `crashed` on unexpected exit — the
+  delete handler also fires `stopped` deterministically because the
+  watchdog races the cascade delete) and from the blank webhook receiver
+  (once per dead-air episode). Web: a Notifications card on the station
+  page — list, add (URL + event checkboxes, none = all), delete. Verified
+  live against a local listener: started (with station name), stopped
+  (config restart), crashed (engine kill -9), blank (dead-air webhook),
+  stopped (station delete), unknown-event 400, delete 204. 61 Rust
   tests, clippy clean, web tsc/lint/build clean.
 
 - **Phase 11 — Podcasts (AzuraCast parity)** (2026-08-15): migration

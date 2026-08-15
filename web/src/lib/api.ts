@@ -425,6 +425,49 @@ export type StreamerConnectInfo = {
   curl_mic_test: string;
 };
 
+/** Events a notification webhook can subscribe to. */
+export const WEBHOOK_EVENTS = [
+  "started",
+  "stopped",
+  "crashed",
+  "blank",
+] as const;
+
+export type NotificationWebhook = {
+  id: string;
+  station_id: string;
+  url: string;
+  events: string;
+  enabled: boolean;
+  created_at: string;
+};
+
+export async function listWebhooks(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<NotificationWebhook[]> {
+  return request<NotificationWebhook[]>(
+    `/api/stations/${stationId}/webhooks`,
+    undefined,
+    signal,
+  );
+}
+
+export async function createWebhook(
+  stationId: string,
+  input: { url: string; events: string; enabled: boolean },
+): Promise<NotificationWebhook> {
+  return request<NotificationWebhook>(`/api/stations/${stationId}/webhooks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  await request<never>(`/api/webhooks/${id}`, { method: "DELETE" });
+}
+
 export async function listStreamers(
   stationId: string,
   signal?: AbortSignal,

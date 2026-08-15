@@ -9,4 +9,5 @@ pub mod control;
 pub mod db;
 pub mod lua;
 pub mod media;
+pub mod notify;
 pub mod stations;

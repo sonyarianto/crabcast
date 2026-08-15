@@ -37,6 +37,7 @@ import { JinglesCard } from "./jingles-card";
 import { ProfileDialog } from "./profile-dialog";
 import { RequestsCard } from "./requests-card";
 import { StreamersCard } from "./streamers-card";
+import { WebhooksCard } from "./webhooks-card";
 
 const STATUS_POLL_MS = 15_000;
 
@@ -326,6 +327,8 @@ export default function StationPage() {
       <RequestsCard stationId={station.id} />
 
       <JinglesCard stationId={station.id} />
+
+      <WebhooksCard stationId={station.id} />
 
       <Card className="mt-4">
         <CardHeader>

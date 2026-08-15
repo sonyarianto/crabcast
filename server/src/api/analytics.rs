@@ -295,6 +295,9 @@ async fn blank_webhook(
             &alert,
         )
         .await;
+        // Fire only on the start of a blank episode (raise_alert returns
+        // Some once), not on every silence report.
+        crate::notify::station_event(&state.pool, station_id, "blank").await;
     }
     Ok(Json(json!({ "ok": true })))
 }

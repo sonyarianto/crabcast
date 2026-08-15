@@ -156,6 +156,22 @@ curl $API/api/now-playing
 #      "now": {"title": "Artist - Song", "started_at": "..."}, "history": [...] }]
 ```
 
+## Notifications (Slack / Discord)
+
+Per-station webhooks that the server posts to on station events — paste an
+incoming-webhook URL (Slack or Discord) into the station page:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| GET | `/api/stations/{id}/webhooks` | List the station's webhooks |
+| POST | `/api/stations/{id}/webhooks` | Create one (`url`, `events` = `*` or `started,stopped,crashed,blank`) |
+| DELETE | `/api/webhooks/{webhook_id}` | Delete one |
+
+Events: `started` (engine up), `stopped` (off air / restart / delete),
+`crashed` (unexpected exit, restarting), `blank` (dead-air episode). The
+payload carries `text` (Slack) and `content` (Discord) fields plus an
+`event` key, e.g. `{"event":"started","text":"🟢 **Radio A** is now on air",...}`.
+
 ## Engine webhooks (internal)
 
 The generated `crabsoup.lua` pings these — used by the supervisor, not by

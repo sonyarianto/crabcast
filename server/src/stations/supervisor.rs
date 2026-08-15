@@ -194,6 +194,7 @@ impl Supervisor {
 
         self.write_config(station).await?;
         let (pid, child) = self.spawn_process(station)?;
+        crate::notify::station_event(&self.pool, &station.id, "started").await;
 
         let handle = ProcessHandle {
             pid,
@@ -232,6 +233,7 @@ impl Supervisor {
                         let _ = child.kill().await;
                         let _ = child.wait().await;
                         tracing::info!("station {id}: stopped by supervisor");
+                        crate::notify::station_event(&self2.pool, &id, "stopped").await;
                         return;
                     }
                     match child.try_wait() {
@@ -251,6 +253,7 @@ impl Supervisor {
                     "station {id}: crabsoup (pid {}) exited ({code}); restarting in {backoff:?}",
                     handle.pid
                 );
+                crate::notify::station_event(&self2.pool, &id, "crashed").await;
 
                 {
                     let mut reg = self2.registry.lock().await;
