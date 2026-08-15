@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MicVocal, Pencil, Plus, RadioTower, Terminal, Trash, Users } from "lucide-react";
+import {
+  MicVocal,
+  Pencil,
+  Plus,
+  RadioTower,
+  Terminal,
+  Trash,
+  Users,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +67,9 @@ export function StreamersCard({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Streamer | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [connectInfo, setConnectInfo] = useState<StreamerConnectInfo | null>(null);
+  const [connectInfo, setConnectInfo] = useState<StreamerConnectInfo | null>(
+    null,
+  );
 
   const reload = () => {
     listStreamers(stationId)
@@ -170,7 +180,7 @@ export function StreamersCard({
             <Users className="size-4" />
             Streamers
             {live && (
-              <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+              <span className="text-destructive-foreground inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold">
                 <span className="size-1.5 rounded-full bg-current" />
                 LIVE
               </span>
@@ -190,9 +200,9 @@ export function StreamersCard({
       <CardContent>
         {live && (
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
-            <span className="font-semibold text-destructive">On air:</span> a
-            DJ is broadcasting — the playlist is ducked and will fade back in
-            on disconnect.
+            <span className="font-semibold text-destructive">On air:</span> a DJ
+            is broadcasting — the playlist is ducked and will fade back in on
+            disconnect.
           </div>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -231,11 +241,7 @@ export function StreamersCard({
                     <RadioTower />
                     Connect
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEdit(s)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                     <Pencil />
                   </Button>
                   <Button
@@ -371,9 +377,8 @@ export function StreamersCard({
                 </pre>
               </div>
               <p className="text-xs text-muted-foreground">
-                The playlist ducks out while you are connected and fades
-                back in when you disconnect. Only one DJ can broadcast at a
-                time.
+                The playlist ducks out while you are connected and fades back in
+                when you disconnect. Only one DJ can broadcast at a time.
               </p>
             </div>
           )}

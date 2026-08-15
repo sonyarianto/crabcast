@@ -83,10 +83,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
     }
   };
 
-  const decide = async (
-    r: RequestEntry,
-    action: "approve" | "reject",
-  ) => {
+  const decide = async (r: RequestEntry, action: "approve" | "reject") => {
     try {
       if (action === "approve") await approveRequest(stationId, r.id);
       else await rejectRequest(stationId, r.id);

@@ -290,7 +290,11 @@ export default function StationsPage() {
                     </CardDescription>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button variant="outline" size="sm" render={<Link href={`/stations/${station.id}`} />}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      render={<Link href={`/stations/${station.id}`} />}
+                    >
                       Details
                     </Button>
                     <Button

@@ -133,9 +133,7 @@ export default function PublicStationPage() {
 
       <main className="mx-auto grid w-full max-w-2xl gap-6 px-4 py-8">
         {station.description && (
-          <p className="text-sm text-muted-foreground">
-            {station.description}
-          </p>
+          <p className="text-sm text-muted-foreground">{station.description}</p>
         )}
 
         {/* Player */}
@@ -146,7 +144,9 @@ export default function PublicStationPage() {
             </span>
             <span
               className={`size-2 rounded-full ${
-                station.now ? "animate-pulse bg-destructive" : "bg-muted-foreground/40"
+                station.now
+                  ? "animate-pulse bg-destructive"
+                  : "bg-muted-foreground/40"
               }`}
             />
           </div>

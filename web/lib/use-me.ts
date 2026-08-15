@@ -6,9 +6,7 @@ import { useRouter } from "next/navigation";
 import { fetchMe, type Me } from "@/lib/api";
 
 export type MeState =
-  | { state: "loading" }
-  | { state: "ready"; me: Me }
-  | { state: "anonymous" };
+  { state: "loading" } | { state: "ready"; me: Me } | { state: "anonymous" };
 
 /**
  * Loads the current session once. `require` redirects unauthenticated

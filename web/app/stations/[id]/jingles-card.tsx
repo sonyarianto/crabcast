@@ -130,9 +130,9 @@ export function JinglesCard({ stationId }: { stationId: string }) {
           </div>
         </CardTitle>
         <CardDescription>
-          Audio files in the station jingles folder. Uploads re-scan the
-          engine so they are playable immediately; the header Play jingle
-          button fires a random one on air.
+          Audio files in the station jingles folder. Uploads re-scan the engine
+          so they are playable immediately; the header Play jingle button fires
+          a random one on air.
         </CardDescription>
       </CardHeader>
       <CardContent>

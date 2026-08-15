@@ -156,8 +156,9 @@ export default function PlaylistsPage() {
             </Link>
             <h1 className="text-2xl font-semibold tracking-tight">Playlists</h1>
             <p className="text-sm text-muted-foreground">
-              Ordered track lists with fade/cue overrides, daypart schedules, and
-              per-playlist weights. Changes restart the engine automatically.
+              Ordered track lists with fade/cue overrides, daypart schedules,
+              and per-playlist weights. Changes restart the engine
+              automatically.
             </p>
           </div>
           <div className="flex gap-2">
@@ -171,7 +172,9 @@ export default function PlaylistsPage() {
         {preview !== null && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="text-base">Generated playlist source</CardTitle>
+              <CardTitle className="text-base">
+                Generated playlist source
+              </CardTitle>
               <CardDescription>
                 What crabsoup runs for this station&apos;s playlists (the `pl`
                 source). Validate with `crabsoup --check` before applying.
@@ -196,8 +199,8 @@ export default function PlaylistsPage() {
             <CardHeader>
               <CardTitle>No playlists yet</CardTitle>
               <CardDescription>
-                Create a playlist, then add tracks from the media library. With no
-                playlists, the station plays its playlist directory.
+                Create a playlist, then add tracks from the media library. With
+                no playlists, the station plays its playlist directory.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -234,7 +237,13 @@ function CreatePlaylistDialog({
       await createPlaylist(stationId, form);
       toast.add({ title: "Playlist created", type: "success", timeout: 3000 });
       setOpen(false);
-      setForm({ name: "", kind: "standard", weight: 1, shuffle: false, enabled: true });
+      setForm({
+        name: "",
+        kind: "standard",
+        weight: 1,
+        shuffle: false,
+        enabled: true,
+      });
       onCreated();
     } catch (err) {
       toast.add({
@@ -316,7 +325,9 @@ function PlaylistForm({
             type="number"
             min={1}
             value={form.weight}
-            onChange={(e) => setForm({ ...form, weight: Number(e.target.value) })}
+            onChange={(e) =>
+              setForm({ ...form, weight: Number(e.target.value) })
+            }
             className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
         </div>
@@ -374,10 +385,7 @@ function PlaylistCard({
     const target = index + dir;
     if (target < 0 || target >= order.length) return;
     [order[index], order[target]] = [order[target], order[index]];
-    await run(
-      () => reorderPlaylistTracks(playlist.id, order),
-      "Order updated",
-    );
+    await run(() => reorderPlaylistTracks(playlist.id, order), "Order updated");
   };
 
   const remove = async (mediaId: string) => {
@@ -404,17 +412,26 @@ function PlaylistCard({
               )}
             </CardTitle>
             <CardDescription>
-              {pl.tracks.length} track{pl.tracks.length === 1 ? "" : "s"} · weight{" "}
-              {pl.weight}
-              {pl.kind === "scheduled" && ` · ${pl.schedules.length} schedule rule${pl.schedules.length === 1 ? "" : "s"}`}
+              {pl.tracks.length} track{pl.tracks.length === 1 ? "" : "s"} ·
+              weight {pl.weight}
+              {pl.kind === "scheduled" &&
+                ` · ${pl.schedules.length} schedule rule${pl.schedules.length === 1 ? "" : "s"}`}
             </CardDescription>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button variant="outline" size="sm" onClick={() => setAddOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAddOpen(true)}
+            >
               <PlusIcon />
               Add tracks
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditing(true)}
+            >
               <PencilIcon />
               Edit
             </Button>
@@ -458,7 +475,9 @@ function PlaylistCard({
                     track={t}
                     onMove={(dir) => move(i, dir)}
                     onRemove={() => remove(t.media_id)}
-                    onSaved={() => run(() => Promise.resolve(), "Overrides saved")}
+                    onSaved={() =>
+                      run(() => Promise.resolve(), "Overrides saved")
+                    }
                   />
                 ))}
               </tbody>
@@ -531,13 +550,17 @@ function TrackRow({
   return (
     <tr className="border-t">
       <td className="px-3 py-2 text-muted-foreground">{index + 1}</td>
-      <td className="max-w-56 truncate px-3 py-2 font-medium">{track.media_id}</td>
+      <td className="max-w-56 truncate px-3 py-2 font-medium">
+        {track.media_id}
+      </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground">fade in</span>
           <input
             value={String(overrides.fade_in)}
-            onChange={(e) => setOverrides({ ...overrides, fade_in: e.target.value })}
+            onChange={(e) =>
+              setOverrides({ ...overrides, fade_in: e.target.value })
+            }
             onBlur={save}
             placeholder="—"
             className={inputClass}
@@ -545,7 +568,9 @@ function TrackRow({
           <span className="text-xs text-muted-foreground">out</span>
           <input
             value={String(overrides.fade_out)}
-            onChange={(e) => setOverrides({ ...overrides, fade_out: e.target.value })}
+            onChange={(e) =>
+              setOverrides({ ...overrides, fade_out: e.target.value })
+            }
             onBlur={save}
             placeholder="—"
             className={inputClass}
@@ -553,7 +578,9 @@ function TrackRow({
           <span className="text-xs text-muted-foreground">cue in</span>
           <input
             value={String(overrides.cue_in)}
-            onChange={(e) => setOverrides({ ...overrides, cue_in: e.target.value })}
+            onChange={(e) =>
+              setOverrides({ ...overrides, cue_in: e.target.value })
+            }
             onBlur={save}
             placeholder="—"
             className={inputClass}
@@ -561,7 +588,9 @@ function TrackRow({
           <span className="text-xs text-muted-foreground">out</span>
           <input
             value={String(overrides.cue_out)}
-            onChange={(e) => setOverrides({ ...overrides, cue_out: e.target.value })}
+            onChange={(e) =>
+              setOverrides({ ...overrides, cue_out: e.target.value })
+            }
             onBlur={save}
             placeholder="—"
             className={inputClass}
@@ -665,7 +694,9 @@ function SchedulesSection({
             <label
               key={d}
               className={`flex h-7 cursor-pointer items-center rounded border px-2 text-xs capitalize ${
-                days.includes(d) ? "border-primary bg-primary/10" : "border-input"
+                days.includes(d)
+                  ? "border-primary bg-primary/10"
+                  : "border-input"
               }`}
             >
               <input
@@ -758,10 +789,7 @@ function EditPlaylistDialog({
         </DialogHeader>
         <PlaylistForm form={form} setForm={setForm} />
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={save} disabled={saving || !form.name.trim()}>
@@ -872,7 +900,9 @@ function AddTracksDialog({
                     }
                   />
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{f.title}</span>
+                    <span className="block truncate font-medium">
+                      {f.title}
+                    </span>
                     <span className="block truncate text-xs text-muted-foreground">
                       {f.artist || "Unknown artist"}
                       {f.duration_seconds
@@ -891,14 +921,13 @@ function AddTracksDialog({
           <p className="text-sm text-muted-foreground">No matches.</p>
         )}
         <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={add} disabled={adding || selected.size === 0}>
-            {adding ? "Adding…" : `Add ${selected.size || ""} track${selected.size === 1 ? "" : "s"}`}
+            {adding
+              ? "Adding…"
+              : `Add ${selected.size || ""} track${selected.size === 1 ? "" : "s"}`}
           </Button>
         </DialogFooter>
       </DialogContent>

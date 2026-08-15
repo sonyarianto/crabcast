@@ -4,10 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Radio } from "lucide-react";
 
-import {
-  getPublicStation,
-  type PublicStation,
-} from "@/lib/api";
+import { getPublicStation, type PublicStation } from "@/lib/api";
 
 const POLL_MS = 10_000;
 
@@ -40,7 +37,9 @@ export default function StationWidget() {
         </div>
         <span
           className={`size-2 shrink-0 rounded-full ${
-            station?.now ? "animate-pulse bg-destructive" : "bg-muted-foreground/40"
+            station?.now
+              ? "animate-pulse bg-destructive"
+              : "bg-muted-foreground/40"
           }`}
         />
       </div>
