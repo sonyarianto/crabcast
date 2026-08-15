@@ -1,0 +1,22 @@
+# Crabcast web app (bare-metal install) — the Next.js standalone server.
+# API_UPSTREAM must point at the API (default localhost:8080).
+[Unit]
+Description=Crabcast web app
+Documentation=https://github.com/sonyarianto/crabcast
+After=network-online.target crabcast-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crabcast
+Group=crabcast
+WorkingDirectory=/opt/crabcast/web
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=API_UPSTREAM=http://127.0.0.1:8080
+ExecStart=/usr/bin/node /opt/crabcast/web/.next/standalone/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -64,6 +64,17 @@ create the initial admin account (email-less, argon2-hashed).
 | `CRABCAST_ALERT_WEBHOOK_URL` | — | Optional outbound alert webhook (raise/resolve events) |
 | `CRABCAST_RETENTION_DAYS` | `30` | Analytics retention: listener samples, history, resolved alerts |
 
+## Backups
+
+A super admin can snapshot everything — database, media library and
+station configs — from **Settings → Backup & restore**: the download is a
+zip (a safe `VACUUM INTO` DB snapshot plus your files) and restoring one
+replaces the data, keeps the previous state as a `*.pre-restore-*` safety
+copy, and restarts the service automatically (the process supervisor in
+Docker or systemd brings it back). Restores are validated before anything
+is touched — wrong app, newer schema, non-SQLite database or unsafe paths
+are rejected.
+
 ## Command reference
 
 ```sh

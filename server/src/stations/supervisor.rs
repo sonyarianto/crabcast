@@ -116,6 +116,16 @@ impl Supervisor {
         }
     }
 
+    /// Media storage root (`CRABCAST_MEDIA_DIR`).
+    pub fn media_root(&self) -> &PathBuf {
+        &self.media_root
+    }
+
+    /// Station data dir (`CRABCAST_DATA_DIR`): `configs/` + `logs/`.
+    pub fn base_dir(&self) -> &PathBuf {
+        &self.base_dir
+    }
+
     fn config_path(&self, id: &str) -> PathBuf {
         self.base_dir.join("configs").join(id).join("crabsoup.lua")
     }

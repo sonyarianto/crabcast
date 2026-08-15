@@ -12,7 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { fetchHealth, type Health } from "@/lib/api";
+import { fetchHealth, fetchMe, listStations, type Health } from "@/lib/api";
 
 type Status =
   | { state: "loading" }
@@ -21,6 +21,7 @@ type Status =
 
 export default function Home() {
   const [status, setStatus] = useState<Status>({ state: "loading" });
+  const [freshInstall, setFreshInstall] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -32,6 +33,16 @@ export default function Home() {
           message: err instanceof Error ? err.message : "Unknown error",
         }),
       );
+    // Fresh install (signed in, no stations yet): surface the wizard.
+    fetchMe(controller.signal)
+      .then(() =>
+        listStations(controller.signal).then((stations) =>
+          setFreshInstall(stations.length === 0),
+        ),
+      )
+      .catch(() => {
+        // anonymous; nothing to offer
+      });
     return () => controller.abort();
   }, []);
 
@@ -100,6 +111,26 @@ export default function Home() {
           Phase 1 live: station control plane with the Crabsoup engine. Media
           library, requests, and analytics land in the next phases.
         </p>
+
+        {freshInstall && (
+          <Card className="border-primary/40">
+            <CardHeader>
+              <CardTitle>Let&apos;s get you on air</CardTitle>
+              <CardDescription>
+                Your first station is a few clicks away — create it, drop in
+                some music, and you&apos;re live.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link
+                href="/welcome"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-[color,box-shadow] outline-none hover:bg-primary/90 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                Set up your first station
+              </Link>
+            </CardContent>
+          </Card>
+        )}
 
         <Link
           href="/stations"

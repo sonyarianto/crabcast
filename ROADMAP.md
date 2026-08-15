@@ -298,8 +298,8 @@ per station in single digits; documented benchmark table.
       one-command install script (Debian/Ubuntu + Docker).
 - [ ] Systemd unit (bare-metal install without Docker), upgrade path with
       DB migrations run automatically.
-- [ ] Backup/restore (DB + media + station configs) from the admin UI.
-- [ ] Onboarding wizard: first-run admin, create first station, add media,
+- [x] Backup/restore (DB + media + station configs) from the admin UI.
+- [x] Onboarding wizard: first-run admin, create first station, add media,
       go live in < 5 minutes.
 - [x] Docs site (mirror Crabsoup's VitePress site pattern): getting started,
       station guide, engine reference, API reference.
@@ -553,6 +553,46 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   re-scans the engine (playable by name) → preview 200 → delete → DJ
   role: rules/jingles mutations 403, queue control 200 → full audit
   trail.
+
+- **Phase 10 — Packaging, deployment & docs (partial)** (2026-08-15):
+  **production packaging** — `docker/Dockerfile.server` (multi-stage
+  release build that also `cargo install`s the Crabsoup engine from the
+  pinned branch, slim `debian:bookworm-slim` runtime with a non-root user,
+  `/data` + `/media` volumes, healthcheck), `docker/compose.prod.yml`
+  (server + web + Icecast, secrets from env with required
+  `CRABCAST_SESSION_SECRET`, named volumes, healthcheck-gated startup),
+  `scripts/install.sh` (installs Docker + compose plugin, clones to
+  `/opt/crabcast`, generates `docker/.env` with a random session secret,
+  `compose up -d --build`), systemd units for the bare-metal path
+  (`packaging/crabcast-server.service` + `crabcast-web.service`, env in
+  `/etc/crabcast/env`, `Restart=on-failure` so restore's exit code 3
+  auto-restarts) and `packaging/README.md` covering both installs and
+  the upgrade path (migrations run automatically at boot). Verified:
+  server release build, engine `cargo install --branch main`, and the
+  runtime stage all build/run; **backup/restore** — `GET /api/backup/
+  download` (super admin) snapshots the live DB with `VACUUM INTO`, zips
+  `crabcast.db` + `media/*` + `stations/configs/*` + `manifest.json`
+  (schema version, counts), and streams it with a cleanup-on-drop body;
+  `POST /api/backup/restore` (super admin, multipart) validates the
+  archive (app + schema version gate, SQLite magic, path-traversal
+  sandbox) into a staging dir, stops the station engines, swaps the live
+  files aside as `<name>.pre-restore-<ts>` safety copies (EXDEV-safe
+  move), then exits with code 3 so the process supervisor restarts and
+  boot migrations run on the restored DB. Verified live end-to-end:
+  backup → wipe → restore → server exits/restarts → admin logs in, station
+  and both uploaded media files are back, safety copy retained; anonymous
+  download 401s. Unit tests cover path sandboxing, version gating and
+  archive round-trips (rejects bad SQLite, newer schema, `../` entries).
+  Web: **Settings** page gains a super-admin-only Backup & restore card
+  (download + restore-with-confirmation); **onboarding wizard** at
+  `/welcome` — three steps (create station → upload music → build playlist
+  & go live) shown on fresh installs; login/bootstrap and the home page
+  route first-run admins to it. Also fixed two latent bugs surfaced by the
+  wizard work: the web client uploaded to `/api/media/upload` while the
+  route is `POST /api/media` (405 — uploads now work), and the Lua
+  generator emitted `jingles({})` for stations without a jingles dir,
+  which the engine rejects at `--check` (the jingle source is now omitted
+  from the chain instead).
 
 - **Phase 9 — Performance, scale & API (partial)** (2026-08-15):
   **benchmarks + load tests** — criterion benches (`benches/hot_paths.rs`:

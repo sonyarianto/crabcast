@@ -1,19 +1,38 @@
 # syntax=docker/dockerfile:1
+# Multi-stage production build for the Crabcast API server.
+# The image bundles the Crabsoup engine (sibling repo) so the supervisor
+# can spawn one process per station without extra mounts.
 
 FROM rust:1-bookworm AS builder
 WORKDIR /build
+
 COPY server/Cargo.toml server/Cargo.lock ./
 COPY server/migrations ./migrations
-RUN mkdir src && echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src
+COPY server/benches ./benches
 COPY server/src ./src
-RUN touch src/main.rs && cargo build --release
+RUN cargo build --release
+
+# The station engine from the sibling repo. Pin CRABSOUP_GIT_REV to a tag
+# or commit for reproducible builds.
+ARG CRABSOUP_GIT_REV=main
+RUN cargo install --git https://github.com/sonyarianto/crabsoup \
+        --branch ${CRABSOUP_GIT_REV} --root /usr/local crabsoup
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
-WORKDIR /app
 COPY --from=builder /build/target/release/crabcast-server /usr/local/bin/crabcast-server
+COPY --from=builder /usr/local/bin/crabsoup /usr/local/bin/crabsoup
+RUN useradd -r -u 10001 crabcast && \
+    mkdir -p /data/stations /media && \
+    chown -R crabcast:crabcast /data /media
+USER crabcast
+ENV DATABASE_URL=sqlite:/data/crabcast.db \
+    BIND_ADDR=0.0.0.0:8080 \
+    CRABCAST_DATA_DIR=/data/stations \
+    CRABCAST_MEDIA_DIR=/media \
+    CRABCAST_SESSION_SECRET=change-me
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+    CMD curl -fs http://localhost:8080/api/health || exit 1
 ENTRYPOINT ["crabcast-server"]

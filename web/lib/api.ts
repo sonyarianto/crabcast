@@ -209,7 +209,7 @@ export async function uploadMedia(files: File[]): Promise<UploadResult[]> {
   const form = new FormData();
   for (const file of files) form.append("files", file);
   // No Content-Type header: fetch sets the multipart boundary itself.
-  return request<UploadResult[]>("/api/media/upload", {
+  return request<UploadResult[]>("/api/media", {
     method: "POST",
     body: form,
   });
@@ -983,4 +983,24 @@ export async function createToken(name: string): Promise<NewToken> {
 
 export async function revokeToken(id: string): Promise<void> {
   await request<never>(`/api/tokens/${id}`, { method: "DELETE" });
+}
+
+export type RestoreResult = {
+  status: string;
+  restarting: boolean;
+  message: string;
+};
+
+/** Same-origin link that streams a full backup zip (DB + media + configs). */
+export function backupDownloadUrl(): string {
+  return "/api/backup/download";
+}
+
+export async function restoreBackup(file: File): Promise<RestoreResult> {
+  const form = new FormData();
+  form.append("file", file);
+  return request<RestoreResult>("/api/backup/restore", {
+    method: "POST",
+    body: form,
+  });
 }

@@ -69,7 +69,9 @@ pub fn render(
     render_playlist_sources(&mut s, playlists, &station.playlist_dir);
     let _ = writeln!(s);
     if station.jingles_dir.is_empty() {
-        let _ = writeln!(s, "j = jingles({{}})");
+        // The engine's jingles() rejects an empty set at `--check` time, so a
+        // station without a jingles dir simply leaves the jingle source out.
+        let _ = writeln!(s, "-- no jingles configured");
     } else {
         let _ = writeln!(s, "j = jingles({{directory = {:?}}})", station.jingles_dir);
     }
@@ -105,9 +107,14 @@ pub fn render(
     // Icecast mount alive) and the `on_blank` hook pings the backend,
     // which raises a `dead_air` alert. It recovers on its own when audio
     // returns.
+    let chain = if station.jingles_dir.is_empty() {
+        "{live, rq, pl}"
+    } else {
+        "{j, live, rq, pl}"
+    };
     let _ = writeln!(
         s,
-        "air = blank.detect(fallback({{j, live, rq, pl}}), {{threshold = -40, duration = 5, exhaust_while_blank = false, on_blank = function() http_post({:?}, {{}}) end}})",
+        "air = blank.detect(fallback({chain}), {{threshold = -40, duration = 5, exhaust_while_blank = false, on_blank = function() http_post({:?}, {{}}) end}})",
         format!("{blank_webhook_url}?station={}", station.id),
     );
     let _ = writeln!(s);
@@ -425,11 +432,12 @@ mod tests {
     }
 
     #[test]
-    fn empty_jingles_dir_renders_an_empty_jingles_source() {
+    fn empty_jingles_dir_omits_the_jingle_source() {
         let mut st = station();
         st.jingles_dir = String::new();
         let s = render(&st, "", "", &[], &[]);
-        assert!(s.contains("j = jingles({})"), "{s}");
+        assert!(s.contains("fallback({live, rq, pl})"), "{s}");
+        assert!(!s.contains("j = jingles("), "{s}");
     }
 
     #[test]

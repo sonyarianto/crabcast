@@ -29,9 +29,10 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
-    // Already signed in? Skip the login screen.
+    // Already signed in? Skip the login screen (the wizard bounces to
+    // /stations when stations already exist).
     fetchMe()
-      .then(() => router.replace("/stations"))
+      .then(() => router.replace("/welcome"))
       .catch(async () => {
         const res = await fetch("/api/auth/setup");
         const body = res.ok ? await res.json() : null;
@@ -58,7 +59,7 @@ export default function LoginPage() {
         type: "success",
         timeout: 3000,
       });
-      router.replace("/stations");
+      router.replace("/welcome");
     } catch (err) {
       toast.add({
         title: "Sign-in failed",

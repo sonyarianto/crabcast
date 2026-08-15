@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod auth;
+pub mod backup;
 pub mod error;
 pub mod health;
 pub mod jingles;
@@ -41,6 +42,7 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
     };
     Router::new()
         .merge(health::routes())
+        .merge(backup::routes())
         .merge(analytics::routes())
         .merge(auth::routes())
         .merge(users::routes())

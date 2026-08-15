@@ -1,0 +1,23 @@
+# Crabcast API server (bare-metal install) — supervises one crabsoup
+# process per station. Env in /etc/crabcast/env (see packaging/README.md).
+[Unit]
+Description=Crabcast radio management API
+Documentation=https://github.com/sonyarianto/crabcast
+After=network-online.target icecast.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crabcast
+Group=crabcast
+EnvironmentFile=/etc/crabcast/env
+ExecStart=/usr/local/bin/crabcast-server
+Restart=on-failure
+RestartSec=5
+# The supervisor spawns one crabsoup child per station; killing the server
+# must take the engines with it.
+KillMode=mixed
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

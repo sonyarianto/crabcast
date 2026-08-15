@@ -40,6 +40,9 @@ time = "0.3"
 # Icecast admin XML parsing (listener stats) and disk free-space check.
 quick-xml = { version = "0.37", features = ["serialize"] }
 libc = "0.2"
+# Backup/restore archives (Phase 10): zip snapshot of DB + media + configs.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tokio-util = { version = "0.7", features = ["io"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

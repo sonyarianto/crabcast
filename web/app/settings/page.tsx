@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  ArchiveIcon,
   CopyIcon,
+  DownloadIcon,
   KeyRoundIcon,
   PlusIcon,
   Radio,
   Trash2Icon,
+  UploadIcon,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -29,9 +32,11 @@ import {
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/toast";
 import {
+  backupDownloadUrl,
   createToken,
   listTokens,
   logout,
+  restoreBackup,
   revokeToken,
   type ApiToken,
 } from "@/lib/api";
@@ -44,6 +49,35 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [newSecret, setNewSecret] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreNote, setRestoreNote] = useState<string | null>(null);
+
+  const restore = async (file: File | undefined) => {
+    if (!file) return;
+    if (
+      !window.confirm(
+        "Restore replaces the database, media library and station configs " +
+          "with the backup. A safety copy of the current state is kept, but " +
+          "the service will restart. Continue?",
+      )
+    )
+      return;
+    setRestoring(true);
+    setRestoreNote(null);
+    try {
+      const result = await restoreBackup(file);
+      setRestoreNote(result.message);
+    } catch (err) {
+      toast.add({
+        title: "Restore failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        type: "error",
+        timeout: 8000,
+      });
+    } finally {
+      setRestoring(false);
+    }
+  };
 
   const reload = useCallback(() => {
     listTokens()
@@ -159,6 +193,51 @@ export default function SettingsPage() {
                 Done
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {meState.state === "ready" && meState.me.user.is_super_admin && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle className="text-base">Backup &amp; restore</CardTitle>
+            <CardDescription>
+              A backup is a zip of the database, media library and station
+              configs. Restoring replaces them and restarts the service (the
+              current state is kept as a safety copy).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                render={<a href={backupDownloadUrl()} />}
+              >
+                <DownloadIcon />
+                Download backup
+              </Button>
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-input px-4 text-sm font-medium shadow-xs transition-colors outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring">
+                <UploadIcon />
+                {restoring ? "Restoring…" : "Restore from backup"}
+                <input
+                  type="file"
+                  accept=".zip"
+                  className="hidden"
+                  disabled={restoring}
+                  onChange={(e) => {
+                    void restore(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {restoreNote && (
+              <p className="flex items-center gap-2 text-sm text-amber-500">
+                <ArchiveIcon className="size-4" />
+                {restoreNote} The page will reload once the service is back.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
