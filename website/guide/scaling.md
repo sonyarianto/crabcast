@@ -62,10 +62,10 @@ What it still needs before it's fully safe:
 - **SQLite remains single-writer** — with `DATABASE_URL` pointing at
   SQLite, run exactly **one** API host and scale the web tier instead;
   multiple processes cannot share one SQLite file reliably.
-- **Backup/restore** — the one-click zip backup uses a SQLite file
-  snapshot (`VACUUM INTO`), so it is SQLite-only today; on Postgres the
-  endpoints return a clear error. Use `pg_dump`/`pg_restore` for PG
-  backups (a pg_dump-based backup is a planned follow-up).
+- **Backup/restore** — the one-click zip backup works on both
+  backends: SQLite uses a file snapshot (`VACUUM INTO`), Postgres runs
+  `pg_dump -Fc`. Requires `pg_dump`/`pg_restore` on the API host, and
+  they should match the Postgres server's major version.
 - **Station placement** — station engines live on the API host that
   spawned them, reading the shared media volume. In the M-station-host
   model the engines run on dedicated hosts that can see the media (shared

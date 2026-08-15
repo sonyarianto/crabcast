@@ -80,9 +80,10 @@ Two supported paths (details in `packaging/README.md` and
 - **SQLite is single-writer** — with a SQLite `DATABASE_URL`, run one API
   host per database. Postgres is fully supported (`postgres://…` URL);
   multi-host deployments use it.
-- **Backup/restore is SQLite-only** — the one-click zip uses a SQLite
-  snapshot (`VACUUM INTO`); on Postgres the endpoints return a clear
-  error (use `pg_dump`/`pg_restore` until a pg_dump-based backup lands).
+- **Backup/restore needs `pg_dump`/`pg_restore` on Postgres** — the
+  one-click zip uses a SQLite snapshot (`VACUUM INTO`) on SQLite and
+  `pg_dump -Fc` on Postgres; keep the client tools on the same major
+  version as the Postgres server.
 - **Icecast is required** for the classic mount stream (built-in mount
   server is the last Phase 11 stretch).
 - HLS is standard (6s segments), not LL-HLS yet.

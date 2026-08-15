@@ -15,7 +15,7 @@ license.workspace = true
 description = "Crabcast API server — AzuraCast-style radio management backend (axum + SQLite)"
 
 [dependencies]
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "macros"] }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
@@ -44,6 +44,7 @@ libc = "0.2"
 # Backup/restore archives (Phase 10): zip snapshot of DB + media + configs.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tokio-util = { version = "0.7", features = ["io"] }
+url = "2"
 # Shared SSE/event bus across API hosts (Phase 9): optional, behind
 # CRABCAST_REDIS_URL.
 redis = { version = "0.29", features = ["tokio-comp", "connection-manager"] }

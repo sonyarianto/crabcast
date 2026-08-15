@@ -736,7 +736,9 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   Verified: 61 SQLite tests pass through Any; full API e2e against a
   real Postgres 16 container (auth/sessions, station+playlist+
   streamer+request CRUD, analytics bucket/top-songs/CSV, webhooks,
-  backup gate). Known gap: `pg_dump`-based backup/restore.
+  backup gate). Backup/restore gained a Postgres path (`pg_dump -Fc` /
+  `pg_restore --clean`) verified end-to-end against Postgres 17; the
+  SQLite path still uses VACUUM INTO.
 
 - **Phase 9 — Horizontal-scale story** (2026-08-15): new docs-site page
   `guide/scaling.md` laying out the three deployment models (single host,

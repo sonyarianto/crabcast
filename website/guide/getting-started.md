@@ -80,12 +80,14 @@ Redis or Postgres.
 
 A super admin can snapshot everything — database, media library and
 station configs — from **Settings → Backup & restore**: the download is a
-zip (a safe `VACUUM INTO` DB snapshot plus your files) and restoring one
-replaces the data, keeps the previous state as a `*.pre-restore-*` safety
-copy, and restarts the service automatically (the process supervisor in
-Docker or systemd brings it back). Restores are validated before anything
-is touched — wrong app, newer schema, non-SQLite database or unsafe paths
-are rejected.
+zip (a `VACUUM INTO` DB snapshot on SQLite, a `pg_dump -Fc` archive on
+Postgres — the latter needs `pg_dump` on the host) plus your files.
+Restoring replaces the data, keeps the previous state as a
+`*.pre-restore-*` safety copy (on Postgres a `pg_dump` safety archive),
+and restarts the service automatically (the process supervisor in Docker
+or systemd brings it back). Restores are validated before anything is
+touched — wrong app, newer schema, invalid database artifact or unsafe
+paths are rejected.
 
 ## Command reference
 
