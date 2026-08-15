@@ -44,7 +44,11 @@ type Status =
   | { state: "error"; message: string };
 
 const ROLES = [
-  { name: "station_manager", label: "Station manager", hint: "manage stations" },
+  {
+    name: "station_manager",
+    label: "Station manager",
+    hint: "manage stations",
+  },
   { name: "dj", label: "DJ", hint: "live control: skip, jingles" },
   { name: "media_editor", label: "Media editor", hint: "edit media (Phase 4)" },
 ] as const;
@@ -81,7 +85,9 @@ export default function UsersPage() {
           message: err instanceof Error ? err.message : "Unknown error",
         }),
       );
-    listStations().then(setStations).catch(() => setStations([]));
+    listStations()
+      .then(setStations)
+      .catch(() => setStations([]));
   }, []);
 
   const canAdmin = meState.state === "ready" && meState.me.user.is_super_admin;
@@ -189,6 +195,9 @@ export default function UsersPage() {
           Crabcast
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" render={<Link href="/settings" />}>
+            Settings
+          </Button>
           <span className="text-sm text-muted-foreground">
             {meState.state === "ready" && meState.me.user.display_name}
           </span>
@@ -305,7 +314,10 @@ export default function UsersPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={submit} disabled={saving || !username || !password}>
+                <Button
+                  onClick={submit}
+                  disabled={saving || !username || !password}
+                >
                   {saving ? "Creating…" : "Create user"}
                 </Button>
               </DialogFooter>
@@ -354,7 +366,9 @@ export default function UsersPage() {
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-1.5 text-xs">
                   {user.roles.length === 0 && (
-                    <span className="text-muted-foreground">No role grants</span>
+                    <span className="text-muted-foreground">
+                      No role grants
+                    </span>
                   )}
                   {user.roles.map((g) => (
                     <span

@@ -105,7 +105,9 @@ export default function LibraryPage() {
   const reload = useCallback((q: LibraryQuery, off: number) => {
     listMedia({ ...q, limit: PAGE_SIZE, offset: off })
       .then((data) =>
-        getMediaConfig().then((config) => setLoaded({ state: "ok", data, config })),
+        getMediaConfig().then((config) =>
+          setLoaded({ state: "ok", data, config }),
+        ),
       )
       .catch((err: unknown) =>
         setLoaded({
@@ -159,7 +161,11 @@ export default function LibraryPage() {
   };
 
   const runUpload = async (files: File[]) => {
-    const audio = files.filter((f) => f.type.startsWith("audio/") || /\.(mp3|flac|ogg|opus|m4a|aac|wav|wma|aiff|mp4|m4b)$/i.test(f.name));
+    const audio = files.filter(
+      (f) =>
+        f.type.startsWith("audio/") ||
+        /\.(mp3|flac|ogg|opus|m4a|aac|wav|wma|aiff|mp4|m4b)$/i.test(f.name),
+    );
     if (audio.length === 0) {
       toast.add({
         title: "No audio files",
@@ -177,12 +183,13 @@ export default function LibraryPage() {
       const errors = results.filter((r) => r.status === "error");
       toast.add({
         title: `Uploaded ${created} file${created === 1 ? "" : "s"}`,
-        description: [
-          dupes ? `${dupes} duplicate${dupes === 1 ? "" : "s"} skipped` : "",
-          errors.length ? `${errors.length} failed` : "",
-        ]
-          .filter(Boolean)
-          .join(" · ") || undefined,
+        description:
+          [
+            dupes ? `${dupes} duplicate${dupes === 1 ? "" : "s"} skipped` : "",
+            errors.length ? `${errors.length} failed` : "",
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined,
         type: errors.length ? "error" : "success",
         timeout: 6000,
       });
@@ -219,7 +226,12 @@ export default function LibraryPage() {
     }
   };
 
-  const saveTags = async (input: { title: string; artist: string; album: string; genre: string }) => {
+  const saveTags = async (input: {
+    title: string;
+    artist: string;
+    album: string;
+    genre: string;
+  }) => {
     if (!editing) return;
     try {
       await updateMediaTags(editing.id, input);
@@ -238,7 +250,8 @@ export default function LibraryPage() {
   };
 
   const remove = async (file: MediaFile) => {
-    if (!confirm(`Delete "${file.title}"? The file is removed from storage.`)) return;
+    if (!confirm(`Delete "${file.title}"? The file is removed from storage.`))
+      return;
     try {
       await deleteMedia(file.id);
       toast.add({ title: "File deleted", type: "success", timeout: 3000 });
@@ -272,6 +285,9 @@ export default function LibraryPage() {
           <Button variant="ghost" size="sm" render={<Link href="/stations" />}>
             Stations
           </Button>
+          <Button variant="ghost" size="sm" render={<Link href="/settings" />}>
+            Settings
+          </Button>
           {meState.state === "ready" && (
             <>
               <span className="text-sm text-muted-foreground">
@@ -296,14 +312,20 @@ export default function LibraryPage() {
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Media library</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Media library
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Upload once, tag it, and point a station&apos;s playlist directory at the
-              library to play it on air.
+              Upload once, tag it, and point a station&apos;s playlist directory
+              at the library to play it on air.
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => reload(query, offset)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => reload(query, offset)}
+            >
               <RefreshCwIcon />
               Refresh
             </Button>
@@ -316,8 +338,8 @@ export default function LibraryPage() {
                 <DialogHeader>
                   <DialogTitle>Upload music</DialogTitle>
                   <DialogDescription>
-                    Drop files anywhere on the page, or pick them here. Duplicates are
-                    skipped automatically.
+                    Drop files anywhere on the page, or pick them here.
+                    Duplicates are skipped automatically.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4">
@@ -335,9 +357,11 @@ export default function LibraryPage() {
                   {loaded.state === "ok" && (
                     <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
                       Files are stored in{" "}
-                      <code className="rounded bg-muted px-1">{loaded.config.storage_dir}</code>
-                      . Set a station&apos;s <em>playlist directory</em> to that path to
-                      broadcast the library.
+                      <code className="rounded bg-muted px-1">
+                        {loaded.config.storage_dir}
+                      </code>
+                      . Set a station&apos;s <em>playlist directory</em> to that
+                      path to broadcast the library.
                     </p>
                   )}
                 </div>
@@ -374,9 +398,7 @@ export default function LibraryPage() {
             runUpload(Array.from(e.dataTransfer.files));
           }}
           className={`mb-4 rounded-xl border-2 border-dashed p-3 transition-colors ${
-            dragging
-              ? "border-primary bg-primary/5"
-              : "border-muted"
+            dragging ? "border-primary bg-primary/5" : "border-muted"
           }`}
         >
           {uploading ? (
@@ -468,7 +490,9 @@ export default function LibraryPage() {
           (loaded.data.items.length === 0 ? (
             <Card>
               <CardHeader>
-                <CardTitle>No tracks{query.q ? " match your search" : " yet"}</CardTitle>
+                <CardTitle>
+                  No tracks{query.q ? " match your search" : " yet"}
+                </CardTitle>
                 <CardDescription>
                   {query.q
                     ? "Try a different search or clear the filters."
@@ -486,7 +510,12 @@ export default function LibraryPage() {
               sortIndicator={sortIndicator}
             />
           ) : (
-            <TrackGrid items={loaded.data.items} onPlay={play} onEdit={setEditing} onDelete={remove} />
+            <TrackGrid
+              items={loaded.data.items}
+              onPlay={play}
+              onEdit={setEditing}
+              onDelete={remove}
+            />
           ))}
 
         {loaded.state === "ok" && loaded.data.total > PAGE_SIZE && (
@@ -555,7 +584,11 @@ export default function LibraryPage() {
 
       {/* Edit dialog */}
       {editing && (
-        <EditDialog file={editing} onClose={() => setEditing(null)} onSave={saveTags} />
+        <EditDialog
+          file={editing}
+          onClose={() => setEditing(null)}
+          onSave={saveTags}
+        />
       )}
     </div>
   );
@@ -581,17 +614,19 @@ function TrackTable({
       <table className="w-full text-sm">
         <thead className="bg-muted/50">
           <tr className="text-left">
-            {(["title", "artist", "album", "genre", "duration"] as const).map((col) => (
-              <th key={col} className="px-3 py-2 font-medium">
-                <button
-                  className="inline-flex items-center gap-0.5 capitalize hover:text-foreground"
-                  onClick={() => onSort(col)}
-                >
-                  {col === "duration" ? "Length" : col}
-                  {sortIndicator(col)}
-                </button>
-              </th>
-            ))}
+            {(["title", "artist", "album", "genre", "duration"] as const).map(
+              (col) => (
+                <th key={col} className="px-3 py-2 font-medium">
+                  <button
+                    className="inline-flex items-center gap-0.5 capitalize hover:text-foreground"
+                    onClick={() => onSort(col)}
+                  >
+                    {col === "duration" ? "Length" : col}
+                    {sortIndicator(col)}
+                  </button>
+                </th>
+              ),
+            )}
             <th className="px-3 py-2 font-medium">Size</th>
             <th className="px-3 py-2 text-right font-medium">Actions</th>
           </tr>
@@ -603,16 +638,24 @@ function TrackTable({
                 <div className="flex items-center gap-3">
                   <CoverArt file={file} className="size-9 rounded" />
                   <div className="min-w-0">
-                    <p className="max-w-60 truncate font-medium">{file.title}</p>
+                    <p className="max-w-60 truncate font-medium">
+                      {file.title}
+                    </p>
                     <p className="max-w-60 truncate text-xs text-muted-foreground">
                       {file.filename}
                     </p>
                   </div>
                 </div>
               </td>
-              <td className="max-w-40 truncate px-3 py-2">{file.artist || "—"}</td>
-              <td className="max-w-40 truncate px-3 py-2">{file.album || "—"}</td>
-              <td className="max-w-32 truncate px-3 py-2">{file.genre || "—"}</td>
+              <td className="max-w-40 truncate px-3 py-2">
+                {file.artist || "—"}
+              </td>
+              <td className="max-w-40 truncate px-3 py-2">
+                {file.album || "—"}
+              </td>
+              <td className="max-w-32 truncate px-3 py-2">
+                {file.genre || "—"}
+              </td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {formatDuration(file.duration_seconds)}
               </td>
@@ -621,10 +664,18 @@ function TrackTable({
               </td>
               <td className="px-3 py-2">
                 <div className="flex justify-end gap-1">
-                  <Button variant="ghost" size="icon-sm" onClick={() => onPlay(file)}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onPlay(file)}
+                  >
                     <PlayIcon />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" onClick={() => onEdit(file)}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onEdit(file)}
+                  >
                     <PencilIcon />
                   </Button>
                   <Button
@@ -672,7 +723,8 @@ function TrackGrid({
           <CardContent className="p-3">
             <p className="truncate text-sm font-medium">{file.title}</p>
             <p className="truncate text-xs text-muted-foreground">
-              {file.artist || "Unknown artist"} · {formatDuration(file.duration_seconds)}
+              {file.artist || "Unknown artist"} ·{" "}
+              {formatDuration(file.duration_seconds)}
             </p>
             <div className="mt-2 flex gap-1">
               <Button variant="ghost" size="xs" onClick={() => onEdit(file)}>
@@ -725,7 +777,12 @@ function EditDialog({
 }: {
   file: MediaFile;
   onClose: () => void;
-  onSave: (input: { title: string; artist: string; album: string; genre: string }) => void;
+  onSave: (input: {
+    title: string;
+    artist: string;
+    album: string;
+    genre: string;
+  }) => void;
 }) {
   const [form, setForm] = useState({
     title: file.title,
@@ -756,7 +813,9 @@ function EditDialog({
               <input
                 id={`edit-${key}`}
                 value={form[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, [key]: e.target.value }))
+                }
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>

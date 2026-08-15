@@ -25,6 +25,79 @@ pub fn routes() -> Router<AppState> {
             "/api/public/stations/{station_id}/library",
             axum::routing::get(library_search),
         )
+        // AzuraCast-style public REST surface (Phase 9): the same data as
+        // the per-station public endpoint, in shapes third-party clients
+        // expect.
+        .route("/api/now-playing", axum::routing::get(now_playing))
+        .route(
+            "/api/station/{station_id}/now-playing",
+            axum::routing::get(station_now_playing),
+        )
+}
+
+/// Every station's now-playing (AzuraCast `/api/now-playing` parity).
+/// Public: used by directory sites and third-party clients.
+async fn now_playing(State(state): State<AppState>) -> ApiResult<Json<Vec<PublicStation>>> {
+    let stations = stations::list(&state.pool).await?;
+    let mut out = Vec::with_capacity(stations.len());
+    for station in stations {
+        let rules = requests::ensure_rules(&state.pool, &station.id).await?;
+        let now = song_history::now_playing(&state.pool, &station.id).await?;
+        let history = song_history::recent(&state.pool, &station.id, 5).await?;
+        out.push(PublicStation {
+            id: station.id.clone(),
+            name: station.name,
+            description: station.description,
+            website: station.website,
+            facebook: station.facebook,
+            twitter: station.twitter,
+            instagram: station.instagram,
+            requests_enabled: rules.enabled,
+            stream_url: format!("/api/stations/{}/stream", station.id),
+            now,
+            history,
+        });
+    }
+    Ok(Json(out))
+}
+
+/// Alias of the per-station public payload under the AzuraCast path.
+async fn station_now_playing(
+    State(state): State<AppState>,
+    Path(station_id): Path<String>,
+) -> ApiResult<Json<PublicStation>> {
+    station_public_inner(&state, &station_id).await
+}
+
+async fn station_public(
+    State(state): State<AppState>,
+    Path(station_id): Path<String>,
+) -> ApiResult<Json<PublicStation>> {
+    station_public_inner(&state, &station_id).await
+}
+
+async fn station_public_inner(
+    state: &AppState,
+    station_id: &str,
+) -> ApiResult<Json<PublicStation>> {
+    let station = stations::get(&state.pool, station_id).await?;
+    let rules = requests::ensure_rules(&state.pool, station_id).await?;
+    let now = song_history::now_playing(&state.pool, station_id).await?;
+    let history = song_history::recent(&state.pool, station_id, 15).await?;
+
+    Ok(Json(PublicStation {
+        id: station.id.clone(),
+        name: station.name,
+        description: station.description,
+        website: station.website,
+        facebook: station.facebook,
+        twitter: station.twitter,
+        instagram: station.instagram,
+        requests_enabled: rules.enabled,
+        stream_url: format!("/api/stations/{station_id}/stream"),
+        now,
+        history,
+    }))
 }
 
 #[derive(Serialize)]
@@ -40,30 +113,6 @@ struct PublicStation {
     stream_url: String,
     now: Option<song_history::SongHistory>,
     history: Vec<song_history::SongHistory>,
-}
-
-async fn station_public(
-    State(state): State<AppState>,
-    Path(station_id): Path<String>,
-) -> ApiResult<Json<PublicStation>> {
-    let station = stations::get(&state.pool, &station_id).await?;
-    let rules = requests::ensure_rules(&state.pool, &station_id).await?;
-    let now = song_history::now_playing(&state.pool, &station_id).await?;
-    let history = song_history::recent(&state.pool, &station_id, 15).await?;
-
-    Ok(Json(PublicStation {
-        id: station.id.clone(),
-        name: station.name,
-        description: station.description,
-        website: station.website,
-        facebook: station.facebook,
-        twitter: station.twitter,
-        instagram: station.instagram,
-        requests_enabled: rules.enabled,
-        stream_url: format!("/api/stations/{station_id}/stream"),
-        now,
-        history,
-    }))
 }
 
 #[derive(Deserialize)]

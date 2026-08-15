@@ -954,3 +954,33 @@ export async function resolveAlert(id: string): Promise<void> {
 export function historyCsvUrl(stationId: string, days: number): string {
   return `/api/stations/${stationId}/analytics/history.csv?days=${days}`;
 }
+
+export type ApiToken = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+};
+
+export type NewToken = ApiToken & {
+  /** The raw secret — shown exactly once, never again retrievable. */
+  secret: string;
+};
+
+export async function listTokens(signal?: AbortSignal): Promise<ApiToken[]> {
+  return request<ApiToken[]>("/api/tokens", undefined, signal);
+}
+
+export async function createToken(name: string): Promise<NewToken> {
+  return request<NewToken>("/api/tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function revokeToken(id: string): Promise<void> {
+  await request<never>(`/api/tokens/${id}`, { method: "DELETE" });
+}

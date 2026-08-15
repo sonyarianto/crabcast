@@ -1,24 +1,18 @@
-mod analytics;
-mod api;
-mod auth;
-mod control;
-mod db;
-mod lua;
-mod media;
-mod stations;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crabcast_server::analytics::poller::AnalyticsPoller;
+use crabcast_server::api;
+use crabcast_server::api::sse::SseHub;
+use crabcast_server::auth;
+use crabcast_server::db;
+use crabcast_server::media;
+use crabcast_server::media::LocalStorage;
+use crabcast_server::stations::supervisor::Supervisor;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
-
-use crate::analytics::poller::AnalyticsPoller;
-use crate::api::sse::SseHub;
-use crate::media::LocalStorage;
-use crate::stations::supervisor::Supervisor;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

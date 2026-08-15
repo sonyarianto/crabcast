@@ -5,13 +5,16 @@ use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use axum::extract::FromRequestParts;
+use axum::http::HeaderValue;
 use axum::http::request::Parts;
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use tower_cookies::Key;
 use tower_sessions::Session;
 
 use crate::api::AppState;
 use crate::api::error::{ApiError, ApiResult};
+use crate::db::tokens;
 use crate::db::users::{self, RoleGrant, User, UserRow};
 
 /// Session key holding the logged-in user's id.
@@ -96,6 +99,25 @@ impl FromRequestParts<AppState> for CurrentUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        // API-token auth (Phase 9): `Authorization: Bearer cb_...` takes
+        // precedence over the session. An *invalid* bearer is rejected
+        // outright rather than silently falling back to a cookie session,
+        // so a revoked/rotated token fails loudly.
+        if let Some(token) = bearer_token(parts) {
+            let hash = format!("{:x}", Sha256::digest(token.as_bytes()));
+            let Some(user_id) = tokens::user_id_for_token(&state.pool, &hash).await? else {
+                return Err(unauthorized());
+            };
+            let Some(row) = users::get(&state.pool, &user_id).await? else {
+                return Err(unauthorized());
+            };
+            let grants = users::grants_for(&state.pool, &user_id).await?;
+            return Ok(CurrentUser {
+                user: row.into(),
+                grants,
+            });
+        }
+
         let session = Session::from_request_parts(parts, state)
             .await
             .map_err(|e| ApiError {
@@ -119,6 +141,17 @@ impl FromRequestParts<AppState> for CurrentUser {
             grants,
         })
     }
+}
+
+/// The raw `Authorization: Bearer <token>` value, if the header is present
+/// and well-formed.
+fn bearer_token(parts: &Parts) -> Option<String> {
+    let header: Option<&HeaderValue> = parts.headers.get("authorization");
+    header
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
 }
 
 /// Reject unless the request carries the session's CSRF token. Mutating

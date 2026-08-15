@@ -5,7 +5,7 @@
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::http::StatusCode;
-use axum::http::header::{CONTENT_TYPE, HeaderValue};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, HeaderValue, IF_NONE_MATCH};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -394,8 +394,30 @@ async fn delete_media(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Strong ETag from a file's metadata: `"{size}-{mtime_nanos}"`. Any tag
+/// write-back rewrites the file, changing mtime, so the tag is always
+/// invalidated exactly when the bytes change.
+fn etag_for(meta: &std::fs::Metadata) -> String {
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("\"{:x}-{:x}\"", meta.len(), mtime)
+}
+
+/// True when the request's `If-None-Match` matches our tag (exact or `*`).
+fn not_modified(if_none_match: Option<&HeaderValue>, etag: &str) -> bool {
+    if_none_match
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v == "*" || v.split(',').any(|t| t.trim() == etag))
+}
+
 /// Stream the stored audio with Range support (seeking in the browser
-/// player) via tower-http's ServeFile.
+/// player) via tower-http's ServeFile, plus CDN-friendly conditional
+/// caching: an `ETag` (invalidated by tag write-backs) and a short
+/// `Cache-Control` so browsers/CDNs revalidate instead of refetching.
 async fn stream_media(
     State(state): State<AppState>,
     _user: CurrentUser,
@@ -409,20 +431,49 @@ async fn stream_media(
         return Err(ApiError::not_found("media file", &id));
     }
     let path = state.storage.abs_path(&row.storage_path);
+    let meta = tokio::fs::metadata(&path).await.map_err(|e| ApiError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: format!("media file stat failed: {e}"),
+    })?;
+    let etag = etag_for(&meta);
+
+    if not_modified(req.headers().get(IF_NONE_MATCH), &etag) {
+        return Ok((
+            StatusCode::NOT_MODIFIED,
+            [
+                (
+                    CACHE_CONTROL,
+                    HeaderValue::from_static("private, max-age=3600"),
+                ),
+                (ETAG, HeaderValue::from_str(&etag).unwrap()),
+            ],
+        )
+            .into_response());
+    }
+
     let service = tower_http::services::ServeFile::new(path);
-    let res = service.oneshot(req).await.map_err(|e| ApiError {
+    let mut res = service.oneshot(req).await.map_err(|e| ApiError {
         status: StatusCode::INTERNAL_SERVER_ERROR,
         message: format!("stream error: {e}"),
     })?;
+    res.headers_mut().insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("private, max-age=3600"),
+    );
+    res.headers_mut()
+        .insert(ETAG, HeaderValue::from_str(&etag).unwrap());
     // ServeFile's response body is its own stream type; axum requires
     // `Response<Body>`, so wrap it.
     Ok(res.map(axum::body::Body::new))
 }
 
+/// Cover art is content-addressed per media id (extracted once at upload;
+/// tag edits never touch it), so it can be cached immutably for a year.
 async fn cover_media(
     State(state): State<AppState>,
     _user: CurrentUser,
     Path(id): Path<String>,
+    req: axum::http::Request<axum::body::Body>,
 ) -> ApiResult<Response> {
     let row = media_db::row_by_id(&state.pool, &id)
         .await?
@@ -437,16 +488,45 @@ async fn cover_media(
         status: StatusCode::NOT_FOUND,
         message: "cover art missing".into(),
     })?;
+    let etag = etag_for_sha(&row.sha256);
+
+    if not_modified(req.headers().get(IF_NONE_MATCH), &etag) {
+        return Ok((
+            StatusCode::NOT_MODIFIED,
+            [
+                (
+                    CACHE_CONTROL,
+                    HeaderValue::from_static("public, max-age=31536000, immutable"),
+                ),
+                (ETAG, HeaderValue::from_str(&etag).unwrap()),
+            ],
+        )
+            .into_response());
+    }
+
     Ok((
         StatusCode::OK,
-        [(
-            CONTENT_TYPE,
-            HeaderValue::from_str(&cover_mime)
-                .unwrap_or_else(|_| HeaderValue::from_static("image/jpeg")),
-        )],
+        [
+            (
+                CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            ),
+            (ETAG, HeaderValue::from_str(&etag).unwrap()),
+            (
+                CONTENT_TYPE,
+                HeaderValue::from_str(&cover_mime)
+                    .unwrap_or_else(|_| HeaderValue::from_static("image/jpeg")),
+            ),
+        ],
         bytes,
     )
         .into_response())
+}
+
+/// Content-addressed ETag for cover art (derived from the audio sha the
+/// cover file is named by).
+fn etag_for_sha(sha: &str) -> String {
+    format!("\"cover-{sha}\"")
 }
 
 fn extension_of(filename: &str) -> Option<String> {
@@ -503,5 +583,49 @@ fn default_tag_type(path: &std::path::Path) -> lofty::tag::TagType {
         Some("flac") | Some("ogg") | Some("opus") => lofty::tag::TagType::VorbisComments,
         Some("m4a") | Some("mp4") | Some("m4b") | Some("aac") => lofty::tag::TagType::Mp4Ilst,
         _ => lofty::tag::TagType::Id3v2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn etag_changes_when_the_file_changes() {
+        let dir = std::env::temp_dir().join(format!("crabcast-etag-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.mp3");
+        std::fs::write(&path, b"aaa").unwrap();
+        let first = etag_for(&std::fs::metadata(&path).unwrap());
+        // Same bytes, same size + mtime → same tag (idempotent).
+        let again = etag_for(&std::fs::metadata(&path).unwrap());
+        assert_eq!(first, again);
+        // Rewriting the file changes mtime → the tag must change.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&path, b"aaaa").unwrap();
+        let second = etag_for(&std::fs::metadata(&path).unwrap());
+        assert_ne!(first, second);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn not_modified_matches_exact_tag_and_wildcard() {
+        let tag = HeaderValue::from_str("\"10-5\"").unwrap();
+        assert!(not_modified(Some(&tag), "\"10-5\""));
+        assert!(!not_modified(Some(&tag), "\"11-6\""));
+        assert!(not_modified(
+            Some(&HeaderValue::from_str("\"a\", \"10-5\"").unwrap()),
+            "\"10-5\""
+        ));
+        assert!(not_modified(
+            Some(&HeaderValue::from_static("*")),
+            "anything"
+        ));
+        assert!(!not_modified(None, "\"10-5\""));
+    }
+
+    #[test]
+    fn cover_etag_is_content_addressed() {
+        assert_eq!(etag_for_sha("abc"), "\"cover-abc\"");
     }
 }

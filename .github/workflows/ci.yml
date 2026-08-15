@@ -23,6 +23,55 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
+      # Benchmarks must at least build (run them with `cargo bench` locally
+      # and record results in ROADMAP §7).
+      - run: cargo bench --no-run
+
+  load:
+    name: Load (API p95 sanity)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - run: cargo build
+      # Boot the API against a throwaway DB, then hammer /api/health and the
+      # public now-playing endpoint. The Phase 9 SLO is p95 < 50 ms on a dev
+      # box; CI runners are shared, so this gates on a generous sanity bound
+      # and the strict number is validated by scripts/load-test.sh locally.
+      - name: Start server
+        run: |
+          rm -f crabcast-ci.db
+          DATABASE_URL=sqlite:crabcast-ci.db \
+          CRABCAST_DATA_DIR=./ci-data CRABCAST_MEDIA_DIR=./ci-media \
+          BIND_ADDR=127.0.0.1:18080 \
+          nohup ./target/debug/crabcast-server > ci-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:18080/api/health && break
+            sleep 1
+          done
+      - name: Install oha
+        run: |
+          curl -sL -o /usr/local/bin/oha \
+            https://github.com/hatoo/oha/releases/latest/download/oha-linux-amd64
+          chmod +x /usr/local/bin/oha
+      - name: Load test
+        run: |
+          oha -z 8s -q 200 -m GET --output-format json http://127.0.0.1:18080/api/health > oha-health.json
+          oha -z 8s -q 200 -m GET --output-format json http://127.0.0.1:18080/api/now-playing > oha-now.json
+          python3 - <<'EOF'
+          import json
+          for name in ("oha-health.json", "oha-now.json"):
+              d = json.load(open(name))
+              p95 = d.get("latencyPercentiles", {}).get("p95", 9999)
+              print(f"{name}: p95={p95:.1f}ms")
+              assert p95 < 500, f"{name} p95 {p95}ms exceeds sanity bound"
+          EOF
 
   web:
     name: Web (tsc, eslint, build)

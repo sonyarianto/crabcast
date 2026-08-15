@@ -6,7 +6,7 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, HeaderValue};
 use axum::response::IntoResponse;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::{get, post};
@@ -358,7 +358,15 @@ async fn stream_mount(
     let stream = res.bytes_stream();
     Ok((
         StatusCode::OK,
-        [(CONTENT_TYPE, content_type)],
+        [
+            (
+                CONTENT_TYPE,
+                HeaderValue::from_str(&content_type)
+                    .unwrap_or_else(|_| HeaderValue::from_static("audio/mpeg")),
+            ),
+            // Live audio is continuous and unbounded — never cached.
+            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        ],
         Body::from_stream(stream),
     ))
 }

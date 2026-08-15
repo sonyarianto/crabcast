@@ -43,6 +43,11 @@ libc = "0.2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+criterion = "0.5"
+
+[[bench]]
+name = "hot_paths"
+harness = false
 
 [profile.release]
 lto = true

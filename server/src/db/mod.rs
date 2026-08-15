@@ -8,6 +8,7 @@ pub mod requests;
 pub mod song_history;
 pub mod stations;
 pub mod streamers;
+pub mod tokens;
 pub mod users;
 
 /// RFC3339 UTC timestamp matching the stations table's `strftime` format.

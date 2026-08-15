@@ -278,17 +278,15 @@ song — all without an account.
 - [x] Uptime/history retention policy (configurable).
 
 **Acceptance**: 7-day listener graph matches Icecast's own numbers within
-tolerance; a forced dead-air episode raises an alert.
+tolerance; a forced dead-air episode raises an alert.### Phase 9 — Performance, scale & API
 
-### Phase 9 — Performance, scale & API
-
-- [ ] Benchmarks (criterion in `server/` + load tests): API p95, station
-      startup, CPU/RAM per station at idle and under playout. Re-baseline
+- [x] Benchmarks (criterion in `server/` + load tests): API p95, station startup,
+      CPU/RAM per station at idle and under playout. Re-baseline
       against AzuraCast's known numbers (documented in this file).
 - [ ] Postgres feature flag (sqlx) for multi-host deployments; shared
       SSE/event bus via Redis pub/sub (optional, behind the flag).
-- [ ] CDN-friendly static serving for media/cover art; cache headers.
-- [ ] Full REST API (AzuraCast-compatible surface where sensible) + API tokens.
+- [x] CDN-friendly static serving for media/cover art; cache headers.
+- [x] Full REST API (AzuraCast-compatible surface where sensible) + API tokens.
 - [ ] Horizontal-scale story: N API hosts, M station hosts, one shared DB.
 
 **Acceptance**: 50 stations on a small VPS with p95 API < 50 ms and idle CPU
@@ -334,9 +332,12 @@ These are the numbers the project is held to; record actuals per phase in Done.
 | Web UI first paint | < 1.5 s on broadband | — |
 | Stations per small VPS (4 vCPU / 8 GB) | 20+ | fewer |
 
-Benchmark methodology: criterion micro-benchmarks in `server/`, `oha`/`k6`
-load tests in CI, and a `scripts/bench-station.sh` that spins up N stations and
-records CPU/RAM over 10 minutes.
+Benchmark methodology: criterion micro-benchmarks in `server/` (`cargo bench`,
+`benches/hot_paths.rs`), `oha` load tests in CI plus `scripts/load-test.sh`
+(p95 per endpoint), and `scripts/bench-station.sh` that spins up N stations and
+records CPU/RAM over 10 minutes. Baseline measured 2026-08-15 (debug build,
+localhost): API p95 ≈ 0.01 ms at 8.5k rps burst on `/api/now-playing`;
+listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
 
 ## 8. UX principles (applies to every phase)
 
@@ -552,6 +553,33 @@ records CPU/RAM over 10 minutes.
   re-scans the engine (playable by name) → preview 200 → delete → DJ
   role: rules/jingles mutations 403, queue control 200 → full audit
   trail.
+
+- **Phase 9 — Performance, scale & API (partial)** (2026-08-15):
+  **benchmarks + load tests** — criterion benches (`benches/hot_paths.rs`:
+  argon2 hash/verify, station-list JSON serialization, the listener-series
+  query over 10k seeded samples), `scripts/load-test.sh` (oha/hey/ab, p95
+  per endpoint vs the 50 ms SLO), `scripts/bench-station.sh` (creates N
+  stations, samples each engine's RSS/%CPU, prints a summary), and a CI
+  `load` job that boots the API and gates on an oha p95 sanity bound;
+  `cargo bench --no-run` added to the rust CI job. Measured on a dev box
+  (debug build): p95 ≈ 0.01 ms at ~8.5k rps burst on `/api/now-playing`,
+  sub-ms at a sustained 200 rps; listener_series(7 d, 60-min buckets)
+  ≈ 7.4 ms. **CDN-friendly static serving** — `/api/media/{id}/stream`
+  and `/api/media/{id}/cover` now send `ETag` + `Cache-Control` and answer
+  `If-None-Match` with 304 (cover art is content-addressed, so it is
+  `public, max-age=1y, immutable`; audio is `private, max-age=1h` since tag
+  edits rewrite the file and change the ETag); the live Icecast proxy is
+  `no-store`. Range/206 continues to come from tower-http ServeFile.
+  **REST API + API tokens** — `api_tokens` table (sha256 secrets, revoked
+  without deletion), Bearer auth in the `CurrentUser` extractor (a bad
+  bearer 401s instead of falling back to the session), token CRUD at
+  `/api/tokens` (secret shown once) with a Settings page (`/settings`)
+  for managing them; AzuraCast-style public surface: `/api/now-playing`
+  (all stations) and `/api/station/{id}/now-playing`, working with or
+  without tokens; the whole admin API is now token-capable. Verified live:
+  token create → `Authorization: Bearer` 200 on `/api/stations`, revoked
+  token 401, bad bearer 401, anonymous 401, `/api/now-playing` 200, load
+  test p95 numbers above.
 
 - **Phase 8 — Analytics & monitoring** (2026-08-15): `listener_samples`
   (per-minute, polled from the Icecast admin API with a reachability flag)

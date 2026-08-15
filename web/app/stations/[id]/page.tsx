@@ -383,6 +383,9 @@ function Shell({
           <Button variant="ghost" size="sm" render={<Link href="/library" />}>
             Library
           </Button>
+          <Button variant="ghost" size="sm" render={<Link href="/settings" />}>
+            Settings
+          </Button>
           {me && (
             <>
               <span className="text-sm text-muted-foreground">

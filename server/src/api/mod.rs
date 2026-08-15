@@ -10,6 +10,7 @@ pub mod requests;
 pub mod sse;
 pub mod stations;
 pub mod streamers;
+pub mod tokens;
 pub mod users;
 
 use std::sync::Arc;
@@ -47,6 +48,7 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
         .merge(media::routes())
         .merge(playlists::routes())
         .merge(streamers::routes())
+        .merge(tokens::routes())
         .merge(requests::routes())
         .merge(jingles::routes())
         .merge(public::routes())
