@@ -269,13 +269,13 @@ song — all without an account.
 
 ### Phase 8 — Analytics & monitoring
 
-- [ ] Listener tracking: poll Icecast admin API per mount, store per-minute
+- [x] Listener tracking: poll Icecast admin API per mount, store per-minute
       samples; unique-listeners approximation.
-- [ ] Station dashboard charts: listeners over time, top songs, request rates,
+- [x] Station dashboard charts: listeners over time, top songs, request rates,
       uptime; song history export (CSV).
-- [ ] Alerts: dead-air (`blank.detect` on_blank webhook), engine crash loops,
+- [x] Alerts: dead-air (`blank.detect` on_blank webhook), engine crash loops,
       disk usage, Icecast unreachable — email/webhook notifications.
-- [ ] Uptime/history retention policy (configurable).
+- [x] Uptime/history retention policy (configurable).
 
 **Acceptance**: 7-day listener graph matches Icecast's own numbers within
 tolerance; a forced dead-air episode raises an alert.
@@ -423,6 +423,15 @@ records CPU/RAM over 10 minutes.
   request); resumable chunked upload is deferred — fine for typical library
   sizes, revisit before large-live-set workflows. Storage is local FS only;
   the `Storage` trait is the seam for S3 later.
+- Listener polling authenticates to the Icecast admin API with the station's
+  *source* credentials; a stock Icecast requires the admin user, so the
+  station's source user must be granted admin rights (or the mount stays
+  unreachable and the `icecast_unreachable` alert fires).
+- Alert notifications are webhook-only (`CRABCAST_ALERT_WEBHOOK_URL`);
+  email/Slack/Discord integrations are deferred to Phase 11.
+- The crash-loop alert fires on the 5th consecutive crash that dies within
+  60 s of start (a long-lived run resets the streak); it is a lifetime
+  counter, not a rolling window, and resolves once the engine stays up 60 s.
 
 ---
 
@@ -543,6 +552,36 @@ records CPU/RAM over 10 minutes.
   re-scans the engine (playable by name) → preview 200 → delete → DJ
   role: rules/jingles mutations 403, queue control 200 → full audit
   trail.
+
+- **Phase 8 — Analytics & monitoring** (2026-08-15): `listener_samples`
+  (per-minute, polled from the Icecast admin API with a reachability flag)
+  + `alerts` tables (dedup by (station, kind) while open); `analytics/`
+  background poller — every 60 s polls each station's `/admin/stats`
+  (quick-xml parse, mount as attribute or element), every 10 min checks
+  media-dir free space (statvfs; 1 GiB / 5 % floor), every 6 h purges rows
+  older than `CRABCAST_RETENTION_DAYS` (default 30: listener samples, song
+  history, resolved alerts); alerts: `icecast_unreachable` (auto-resolved
+  when the admin API answers again), `dead_air` (the generated Lua wraps
+  the output chain in `blank.detect({threshold = -40, duration = 5,
+  exhaust_while_blank = false, on_blank = http_post →
+  /api/webhooks/blank})` — the mount stays up while silent, and the first
+  real track webhook clears it), `engine_crash_loop` (supervisor raises on
+  the 5th consecutive crash within 60 s of start; cleared once the engine
+  stays up 60 s), `disk_low` (global); optional outbound webhook
+  (`CRABCAST_ALERT_WEBHOOK_URL`) posts raise/resolve events; analytics API
+  — listener series (bucketed AVG), summary (current/unique-24h/uptime/
+  plays/requests), top songs, per-day request stats, song-history CSV
+  export (`history.csv`, RFC 4180 escaping), alert list + resolve
+  (station_manager-gated); web: `/stations/[id]/analytics` page — 24 h /
+  7 d / 30 d range, recharts area chart, stat cards, top songs + request
+  tables, alerts feed with resolve buttons, CSV export link; Analytics
+  button added to the station page. Verified end-to-end against a live
+  server with a mock Icecast admin: 7 listeners / 42 connections parsed
+  and sampled, anonymous 401s, dead-air raise → dedupe → manual resolve →
+  track-webhook auto-clear, Icecast-down raise → auto-resolve on recovery,
+  uptime % tracked, CSV shape; the full generated script (incl. the
+  `blank.detect` wrapper) passes a real `crabsoup --check` — guarded by a
+  new test.
 
 - **Phase 7 — Public pages & web player** (2026-08-15): stations gained
   optional profile/social columns (website, facebook, twitter,

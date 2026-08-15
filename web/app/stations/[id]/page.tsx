@@ -60,27 +60,30 @@ export default function StationPage() {
   // during its own declaration, so it goes through a ref.
   const refreshRef = useRef<(scheduleRetry: boolean) => void>(() => {});
 
-  const refreshStatus = useCallback((scheduleRetry: boolean) => {
-    getStationStatus(id)
-      .then((status) => {
-        retryRef.current = 0;
-        setLoaded((prev) => {
-          if (!prev) return prev;
-          return { station: prev.station, status };
+  const refreshStatus = useCallback(
+    (scheduleRetry: boolean) => {
+      getStationStatus(id)
+        .then((status) => {
+          retryRef.current = 0;
+          setLoaded((prev) => {
+            if (!prev) return prev;
+            return { station: prev.station, status };
+          });
+          setNowPlaying(status.playing ?? null);
+          if (status.history.length) setHistory(status.history);
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          setError(message);
+          if (!scheduleRetry) return;
+          // A short backoff keeps the polling alive across engine restarts
+          // without spamming the log when the API itself is down.
+          retryRef.current = Math.min(retryRef.current + 1, 5);
+          setTimeout(() => refreshRef.current(true), retryRef.current * 2000);
         });
-        setNowPlaying(status.playing ?? null);
-        if (status.history.length) setHistory(status.history);
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        setError(message);
-        if (!scheduleRetry) return;
-        // A short backoff keeps the polling alive across engine restarts
-        // without spamming the log when the API itself is down.
-        retryRef.current = Math.min(retryRef.current + 1, 5);
-        setTimeout(() => refreshRef.current(true), retryRef.current * 2000);
-      });
-  }, [id]);
+    },
+    [id],
+  );
 
   useEffect(() => {
     refreshRef.current = refreshStatus;
@@ -213,6 +216,13 @@ export default function StationPage() {
           <Button
             variant="outline"
             size="sm"
+            render={<Link href={`/stations/${station.id}/analytics`} />}
+          >
+            Analytics
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             render={<Link href={`/stations/${station.id}/public`} />}
           >
             Public page
@@ -267,7 +277,7 @@ export default function StationPage() {
               />
               <span className="text-sm font-medium">{process}</span>
               {status?.live && (
-                <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold text-destructive-foreground">
+                <span className="text-destructive-foreground inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold">
                   <span className="size-1.5 rounded-full bg-current" />
                   LIVE — DJ on air, playlist ducked
                 </span>

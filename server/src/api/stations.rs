@@ -312,6 +312,8 @@ async fn track_webhook(
             }),
         )
         .await;
+    // Real audio again → clear any open dead-air alert.
+    crate::api::analytics::clear_dead_air(&state.pool, station_id).await;
     Ok(Json(json!({ "ok": true })))
 }
 

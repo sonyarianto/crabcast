@@ -1,3 +1,4 @@
+mod analytics;
 mod api;
 mod auth;
 mod control;
@@ -14,6 +15,7 @@ use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
+use crate::analytics::poller::AnalyticsPoller;
 use crate::api::sse::SseHub;
 use crate::media::LocalStorage;
 use crate::stations::supervisor::Supervisor;
@@ -38,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = db::init(&database_url).await?;
 
     let supervisor = Supervisor::new(data_dir, media_dir.clone(), pool.clone());
-    let storage: Arc<dyn media::Storage> = Arc::new(LocalStorage::new(media_dir.into()));
+    let storage: Arc<dyn media::Storage> = Arc::new(LocalStorage::new(media_dir.clone().into()));
 
     // Boot: start every station's engine (best-effort; logs failures).
     let stations = db::stations::list(&pool).await?;
@@ -46,6 +48,11 @@ async fn main() -> anyhow::Result<()> {
     supervisor.start_all(&stations).await;
 
     let _hub = SseHub::new();
+
+    // Phase 8: background analytics — listener polling, alerts, retention.
+    let poller = AnalyticsPoller::new(pool.clone(), supervisor.clone(), media_dir.clone().into());
+    tokio::spawn(async move { poller.run().await });
+
     let app = api::router(pool.clone(), supervisor.clone(), storage)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())

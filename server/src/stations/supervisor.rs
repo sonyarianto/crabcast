@@ -28,6 +28,10 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 const INITIAL_BACKOFF: Duration = Duration::from_millis(500);
 /// Watchdog poll interval for child exit status + stop flag.
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+/// Crashes within this many seconds of start count toward a crash loop.
+const CRASH_WINDOW_SECS: u64 = 60;
+/// Consecutive short-lived crashes before an `engine_crash_loop` alert fires.
+const CRASH_LOOP_THRESHOLD: u32 = 5;
 
 /// True while a process with this pid exists (Linux `/proc`).
 fn pid_exists(pid: u32) -> bool {
@@ -67,6 +71,9 @@ struct Registry {
     children: HashMap<String, Child>,
     restarts: HashMap<String, u64>,
     last_error: HashMap<String, Option<String>>,
+    /// Consecutive crashes that died within `CRASH_WINDOW_SECS` of start;
+    /// used to distinguish a crash loop from a one-off.
+    crash_streak: HashMap<String, u32>,
 }
 
 #[derive(Clone)]
@@ -78,6 +85,9 @@ pub struct Supervisor {
     media_root: PathBuf,
     crabsoup_bin: PathBuf,
     webhook_url: Option<String>,
+    /// Outbound alert webhook (`CRABCAST_ALERT_WEBHOOK_URL`); crash-loop
+    /// alerts raised by this supervisor are posted there.
+    alert_webhook_url: Option<String>,
     pool: sqlx::SqlitePool,
     registry: Arc<Mutex<Registry>>,
 }
@@ -94,11 +104,13 @@ impl Supervisor {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("crabsoup"));
         let webhook_url = std::env::var("CRABCAST_WEBHOOK_URL").ok();
+        let alert_webhook_url = std::env::var("CRABCAST_ALERT_WEBHOOK_URL").ok();
         Self {
             base_dir,
             media_root,
             crabsoup_bin,
             webhook_url,
+            alert_webhook_url,
             pool,
             registry: Arc::new(Mutex::new(Registry::default())),
         }
@@ -118,13 +130,20 @@ impl Supervisor {
             .webhook_url
             .as_deref()
             .unwrap_or("http://localhost:8080/api/webhooks/track");
+        let blank_webhook = "http://localhost:8080/api/webhooks/blank";
         // Playlist sources (absolute media paths) feed the Lua generator;
         // enabled streamers contribute per-DJ harbor source passwords.
         let playlists =
             crate::db::playlists::sources(&self.pool, &station.id, &self.media_root).await?;
         let streamer_passwords =
             crate::db::streamers::enabled_passwords(&self.pool, &station.id).await?;
-        let script = lua::render(station, webhook, &playlists, &streamer_passwords);
+        let script = lua::render(
+            station,
+            webhook,
+            blank_webhook,
+            &playlists,
+            &streamer_passwords,
+        );
 
         // Validate before touching anything.
         lua::validate(&script, &self.crabsoup_bin).map_err(|e| {
@@ -230,6 +249,50 @@ impl Supervisor {
                     *restarts += 1;
                     reg.last_error
                         .insert(id.clone(), Some(format!("exited: {code}")));
+                }
+
+                // Crash-loop detection: count consecutive crashes that died
+                // shortly after start (a long-lived process resets the
+                // streak). At the threshold raise an alert; the analytics
+                // poller resolves it once the engine stays up again.
+                {
+                    let mut reg = self2.registry.lock().await;
+                    let streak = if handle.started_at.elapsed().as_secs() < CRASH_WINDOW_SECS {
+                        let c = reg.crash_streak.entry(id.clone()).or_insert(0);
+                        *c += 1;
+                        *c
+                    } else {
+                        reg.crash_streak.insert(id.clone(), 0);
+                        0
+                    };
+                    drop(reg);
+                    if streak >= CRASH_LOOP_THRESHOLD {
+                        let detail = format!(
+                            "{streak} crashes within {CRASH_WINDOW_SECS}s of start (last exit: {code})"
+                        );
+                        match crate::db::analytics::raise_alert(
+                            &self2.pool,
+                            Some(&id),
+                            "engine_crash_loop",
+                            "error",
+                            "Engine crash loop",
+                            &detail,
+                        )
+                        .await
+                        {
+                            Ok(Some(alert)) => {
+                                tracing::error!("station {id}: {detail}");
+                                crate::analytics::notify(
+                                    self2.alert_webhook_url.as_deref(),
+                                    "raised",
+                                    &alert,
+                                )
+                                .await;
+                            }
+                            Ok(None) => {}
+                            Err(e) => tracing::error!("station {id}: raise_alert failed: {e}"),
+                        }
+                    }
                 }
 
                 sleep(backoff).await;

@@ -1,3 +1,4 @@
+pub mod analytics;
 pub mod auth;
 pub mod error;
 pub mod health;
@@ -39,6 +40,7 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
     };
     Router::new()
         .merge(health::routes())
+        .merge(analytics::routes())
         .merge(auth::routes())
         .merge(users::routes())
         .merge(stations::routes())

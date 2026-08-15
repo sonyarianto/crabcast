@@ -178,21 +178,31 @@ export async function listMedia(
     if (value !== undefined && value !== "") params.set(key, String(value));
   }
   const qs = params.toString();
-  return request<MediaList>(`/api/media${qs ? `?${qs}` : ""}`, undefined, signal);
+  return request<MediaList>(
+    `/api/media${qs ? `?${qs}` : ""}`,
+    undefined,
+    signal,
+  );
 }
 
 export async function getMedia(id: string): Promise<MediaFile> {
   return request<MediaFile>(`/api/media/${id}`);
 }
 
-export async function getMediaFacets(signal?: AbortSignal): Promise<MediaFacets> {
+export async function getMediaFacets(
+  signal?: AbortSignal,
+): Promise<MediaFacets> {
   return request<MediaFacets>("/api/media/facets", undefined, signal);
 }
 
 export async function getMediaConfig(signal?: AbortSignal): Promise<{
   storage_dir: string;
 }> {
-  return request<{ storage_dir: string }>("/api/media/config", undefined, signal);
+  return request<{ storage_dir: string }>(
+    "/api/media/config",
+    undefined,
+    signal,
+  );
 }
 
 export async function uploadMedia(files: File[]): Promise<UploadResult[]> {
@@ -709,7 +719,11 @@ export async function getStationStatus(
   id: string,
   signal?: AbortSignal,
 ): Promise<StationStatus> {
-  return request<StationStatus>(`/api/stations/${id}/status`, undefined, signal);
+  return request<StationStatus>(
+    `/api/stations/${id}/status`,
+    undefined,
+    signal,
+  );
 }
 
 export async function sendCommand(id: string, command: string): Promise<void> {
@@ -783,7 +797,9 @@ export type UserInput = {
   roles?: RoleGrant[];
 };
 
-export async function listUsers(signal?: AbortSignal): Promise<UserWithRoles[]> {
+export async function listUsers(
+  signal?: AbortSignal,
+): Promise<UserWithRoles[]> {
   return request<UserWithRoles[]>("/api/users", undefined, signal);
 }
 
@@ -815,4 +831,126 @@ export async function listAudit(
   signal?: AbortSignal,
 ): Promise<AuditEntry[]> {
   return request<AuditEntry[]>(`/api/audit?limit=${limit}`, undefined, signal);
+}
+
+export type ListenerPoint = {
+  ts: string;
+  listeners: number;
+  connections: number;
+  samples: number;
+  reachable: number;
+};
+
+export type ListenerSeries = {
+  points: ListenerPoint[];
+  bucket_minutes: number;
+};
+
+export type AnalyticsSummary = {
+  current_listeners: number;
+  last_sample_at: string | null;
+  unique_listeners_24h: number;
+  uptime_percent_24h: number | null;
+  plays_today: number;
+  requests_today: number;
+};
+
+export type TopSong = {
+  title: string;
+  plays: number;
+  total_seconds: number;
+  last_played_at: string;
+};
+
+export type RequestDay = {
+  day: string;
+  total: number;
+  accepted: number;
+  rejected: number;
+  pending: number;
+};
+
+export type Alert = {
+  id: string;
+  station_id: string | null;
+  kind: string;
+  severity: "warning" | "error";
+  title: string;
+  detail: string;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export async function getListenerSeries(
+  stationId: string,
+  from: string,
+  to: string,
+  bucketMinutes: number,
+  signal?: AbortSignal,
+): Promise<ListenerSeries> {
+  const params = new URLSearchParams({
+    from,
+    to,
+    bucket: String(bucketMinutes),
+  });
+  return request<ListenerSeries>(
+    `/api/stations/${stationId}/analytics/listeners?${params}`,
+    undefined,
+    signal,
+  );
+}
+
+export async function getAnalyticsSummary(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<AnalyticsSummary> {
+  return request<AnalyticsSummary>(
+    `/api/stations/${stationId}/analytics/summary`,
+    undefined,
+    signal,
+  );
+}
+
+export async function getTopSongs(
+  stationId: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<TopSong[]> {
+  return request<TopSong[]>(
+    `/api/stations/${stationId}/analytics/top-songs?days=${days}`,
+    undefined,
+    signal,
+  );
+}
+
+export async function getRequestStats(
+  stationId: string,
+  days: number,
+  signal?: AbortSignal,
+): Promise<RequestDay[]> {
+  return request<RequestDay[]>(
+    `/api/stations/${stationId}/analytics/requests?days=${days}`,
+    undefined,
+    signal,
+  );
+}
+
+export async function listAlerts(
+  stationId: string,
+  openOnly: boolean,
+  signal?: AbortSignal,
+): Promise<Alert[]> {
+  return request<Alert[]>(
+    `/api/alerts?station_id=${stationId}&open=${openOnly}`,
+    undefined,
+    signal,
+  );
+}
+
+export async function resolveAlert(id: string): Promise<void> {
+  await request<never>(`/api/alerts/${id}/resolve`, { method: "POST" });
+}
+
+export function historyCsvUrl(stationId: string, days: number): string {
+  return `/api/stations/${stationId}/analytics/history.csv?days=${days}`;
 }

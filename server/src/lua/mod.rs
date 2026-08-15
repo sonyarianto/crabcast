@@ -27,11 +27,15 @@ use crate::db::stations::Station;
 /// runs against the file, and the file lives under the station's config
 /// dir, not in the repo.
 ///
-/// `webhook_url` is the backend's track webhook (the engine's `http_post`
-/// carries no headers, so the station id rides in the query string).
+/// `webhook_url` is the backend's track webhook and `blank_webhook_url`
+/// the dead-air webhook (the engine's `http_post` carries no headers, so
+/// the station id rides in the query string). The output chain is wrapped
+/// in `blank.detect` (see the generated script below) so dead air raises an
+/// alert through the blank webhook.
 pub fn render(
     station: &Station,
     webhook_url: &str,
+    blank_webhook_url: &str,
     playlists: &[PlaylistSource],
     streamer_passwords: &[String],
 ) -> String {
@@ -96,9 +100,20 @@ pub fn render(
     let _ = writeln!(s);
     let _ = writeln!(s, "rq = request.queue()");
     let _ = writeln!(s);
+    // Dead-air guard: after 5s of silence the wrapped chain goes blank
+    // (still emitting silence — `exhaust_while_blank = false` keeps the
+    // Icecast mount alive) and the `on_blank` hook pings the backend,
+    // which raises a `dead_air` alert. It recovers on its own when audio
+    // returns.
     let _ = writeln!(
         s,
-        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, on_metadata(fallback({{j, live, rq, pl}}), function(m) http_post({:?}, m) end))",
+        "air = blank.detect(fallback({{j, live, rq, pl}}), {{threshold = -40, duration = 5, exhaust_while_blank = false, on_blank = function() http_post({:?}, {{}}) end}})",
+        format!("{blank_webhook_url}?station={}", station.id),
+    );
+    let _ = writeln!(s);
+    let _ = writeln!(
+        s,
+        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, on_metadata(air, function(m) http_post({:?}, m) end))",
         station.icecast_host,
         station.icecast_port,
         station.icecast_mount,
@@ -365,6 +380,7 @@ mod tests {
         let s = render(
             &station(),
             "http://localhost:8080/api/webhooks/track",
+            "http://localhost:8080/api/webhooks/blank",
             &[],
             &[],
         );
@@ -379,7 +395,7 @@ mod tests {
             "format = \"mp3\"",
             "http_post(\"http://localhost:8080/api/webhooks/track?station=s1\", m)",
             "rq = request.queue()",
-            "on_metadata(fallback({j, live, rq, pl}), function(m) http_post(",
+            "on_metadata(air, function(m) http_post(",
             "fallback({j, live, rq, pl})",
         ] {
             assert!(s.contains(needle), "missing {needle:?} in:\n{s}");
@@ -387,10 +403,32 @@ mod tests {
     }
 
     #[test]
+    fn dead_air_guard_wraps_the_output_chain() {
+        let s = render(
+            &station(),
+            "http://localhost:8080/api/webhooks/track",
+            "http://localhost:8080/api/webhooks/blank",
+            &[],
+            &[],
+        );
+        assert!(
+            s.contains(
+                "air = blank.detect(fallback({j, live, rq, pl}), {threshold = -40, duration = 5, exhaust_while_blank = false, on_blank = function() http_post(\"http://localhost:8080/api/webhooks/blank?station=s1\", {}) end})"
+            ),
+            "{s}"
+        );
+        assert!(s.contains("output.icecast({host = \"localhost\""), "{s}");
+        assert!(
+            s.contains("on_metadata(air, function(m) http_post("),
+            "on_metadata must sit above blank.detect: {s}"
+        );
+    }
+
+    #[test]
     fn empty_jingles_dir_renders_an_empty_jingles_source() {
         let mut st = station();
         st.jingles_dir = String::new();
-        let s = render(&st, "", &[], &[]);
+        let s = render(&st, "", "", &[], &[]);
         assert!(s.contains("j = jingles({})"), "{s}");
     }
 
@@ -398,6 +436,7 @@ mod tests {
     fn streamer_passwords_are_rendered_as_harbor_extras() {
         let s = render(
             &station(),
+            "",
             "",
             &[],
             &["sarah-secret".to_string(), "mj-pw".to_string()],
@@ -409,7 +448,7 @@ mod tests {
             "{s}"
         );
         // No streamers → no extra_passwords key at all.
-        let plain = render(&station(), "", &[], &[]);
+        let plain = render(&station(), "", "", &[], &[]);
         assert!(!plain.contains("extra_passwords"), "{plain}");
     }
 
@@ -526,5 +565,41 @@ output.preview(sine({freq = 440, duration = 1}))
 "#;
         let out = validate(script, Path::new(&bin)).unwrap();
         assert!(out.contains("sample_rate") || out.contains("output"));
+    }
+
+    #[test]
+    fn full_rendered_script_passes_check_when_binary_exists() {
+        // Skip unless a crabsoup binary is available. Guards the exact
+        // generated shape (incl. the blank.detect dead-air wrapper) against
+        // engine syntax drift. The engine refuses empty playlist/jingles
+        // dirs at --check, so the station points at a temp dir with one
+        // (garbage) audio file — only existence is checked.
+        let Ok(bin) = std::env::var("CRABSOUP_BIN") else {
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("crabcast-check-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.mp3"), b"not real audio but the file exists").unwrap();
+
+        let mut st = station();
+        let dir_str = dir.to_str().unwrap().to_string();
+        st.playlist_dir = dir_str.clone();
+        st.jingles_dir = dir_str.clone();
+        let file = dir.join("a.mp3");
+        let playlists = vec![source("standard", &[file.to_str().unwrap()])];
+
+        let s = render(
+            &st,
+            "http://localhost:8080/api/webhooks/track",
+            "http://localhost:8080/api/webhooks/blank",
+            &playlists,
+            &[],
+        );
+        let out = validate(&s, Path::new(&bin)).unwrap();
+        assert!(
+            out.contains("sample_rate") || out.contains("output"),
+            "unexpected check output: {out}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,6 +1,7 @@
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+pub mod analytics;
 pub mod media;
 pub mod playlists;
 pub mod requests;

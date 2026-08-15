@@ -37,6 +37,9 @@ tower-sessions = { version = "0.14", features = ["private"] }
 tower-sessions-sqlx-store = { version = "0.15", features = ["sqlite"] }
 tower-cookies = "0.11"
 time = "0.3"
+# Icecast admin XML parsing (listener stats) and disk free-space check.
+quick-xml = { version = "0.37", features = ["serialize"] }
+libc = "0.2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
