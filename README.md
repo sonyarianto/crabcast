@@ -6,7 +6,9 @@ admin/public UIs — built on a **Rust** backend and the
 [Crabsoup](https://github.com/) streaming engine, with a **Vite + React**
 **SPA** (TypeScript, Tailwind CSS v4, shadcn/ui) frontend.
 
-See [ROADMAP.md](ROADMAP.md) for the full plan and current phase.
+See [ROADMAP.md](ROADMAP.md) for the full plan, [CHANGELOG.md](CHANGELOG.md)
+for history, and [docs/release.md](docs/release.md) for the deployment
+checklist.
 
 ## Stack
 
