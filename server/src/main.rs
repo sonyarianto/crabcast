@@ -59,11 +59,9 @@ async fn main() -> anyhow::Result<()> {
             ))
         }
         db::DbKind::Sqlite => {
-            let url = if database_url.contains(':') {
-                database_url.clone()
-            } else {
-                format!("sqlite:{database_url}")
-            };
+            // Same URL normalization as db::init — a missing file must be
+            // created on first boot (AnyPool/SqlitePoolOptions won't do it).
+            let url = db::normalize_url(&database_url);
             auth::SessionStoreAny::Sqlite(tower_sessions_sqlx_store::SqliteStore::new(
                 sqlx::sqlite::SqlitePoolOptions::new()
                     .max_connections(4)

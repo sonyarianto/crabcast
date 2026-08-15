@@ -318,7 +318,8 @@ install script; backup → restore verified in CI.
 ### Phase 11 — Stretch goals (post-1.0)
 
 - [x] Podcasts (AzuraCast parity): upload episodes, feed generation.
-- [x] HLS streaming as an alternative to raw mounts (AAC segments + hls.js; LL-HLS later).
+- [x] HLS streaming as an alternative to raw mounts (AAC segments + hls.js;
+      LL-HLS increment shipped: 2s segments + player low-latency mode).
 - [x] PWA admin + mobile remote control.
 - [ ] i18n: full translation pass (next-intl), RTL support.
 - [ ] Built-in mount server (skip Icecast) — only after Phase 8/9 listener
@@ -851,6 +852,20 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   differently (DJ controls but cannot manage, scoped manager cannot create
   stations), deleted users lose sessions immediately, wrong passwords
   rejected, every mutation lands in the audit log.
+
+- **Phase 11 — LL-HLS increment** (2026-08-15): live latency roughly
+  halved — new HLS stations default to 2s segments (migration 0015 moves
+  existing 5s stations over; the value stays per-station editable) and
+  the web player runs hls.js in low-latency mode
+  (`lowLatencyMode` + `liveSyncDurationCount: 2`, `backBufferLength:
+  30`), so playback sits ~2 segments behind the live edge instead of
+  buffering 15+s of 5s chunks. True Apple LL-HLS (EXT-X-PART partial
+  segments, sub-second latency) remains engine stretch work. Also fixed a
+  regression the migration verification surfaced: the Any-driver port had
+  dropped `create_if_missing` for SQLite, so a fresh `sqlite:crabcast.db`
+  failed to boot — plain SQLite URLs are now normalized to
+  `sqlite:file:…?mode=rwc` (regression-tested) in both the pool and the
+  session store.
 
 ---
 

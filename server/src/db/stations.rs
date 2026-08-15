@@ -169,7 +169,7 @@ fn default_icecast_source_password() -> String {
     "hackme".into()
 }
 fn default_hls_segment_seconds() -> f64 {
-    5.0
+    2.0
 }
 fn default_hls_retention() -> i64 {
     12

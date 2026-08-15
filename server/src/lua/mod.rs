@@ -382,7 +382,7 @@ mod tests {
             icecast_source_password: "hackme".into(),
             hls_enabled: false.into(),
             hls_dir: String::new(),
-            hls_segment_seconds: 5.0,
+            hls_segment_seconds: 2.0,
             hls_retention: 12,
             website: String::new(),
             facebook: String::new(),

@@ -86,5 +86,7 @@ Two supported paths (details in `packaging/README.md` and
   version as the Postgres server.
 - **Icecast is required** for the classic mount stream (built-in mount
   server is the last Phase 11 stretch).
-- HLS is standard (6s segments), not LL-HLS yet.
+- HLS ships with 2s segments and the player's low-latency mode (~5s
+  end-to-end); true Apple LL-HLS (EXT-X-PART partial segments) is a
+  stretch goal.
 - i18n (non-English UI) is not shipped yet.

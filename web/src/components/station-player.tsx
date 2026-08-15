@@ -40,7 +40,15 @@ export function StationPlayer({
             audio.src = hlsPlaylistUrl;
             return;
           }
-          const hls = new Hls({ enableWorker: true });
+          const hls = new Hls({
+            enableWorker: true,
+            // Phase 11 LL-HLS: with 2s segments the player syncs ~2 segments
+            // behind the live edge instead of buffering 15+s of 5s chunks.
+            lowLatencyMode: true,
+            liveSyncDurationCount: 2,
+            liveMaxLatencyDurationCount: 4,
+            backBufferLength: 30,
+          });
           hlsRef.current = hls;
           hls.loadSource(hlsPlaylistUrl);
           hls.attachMedia(audio);

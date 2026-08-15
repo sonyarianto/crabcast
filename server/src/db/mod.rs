@@ -44,6 +44,23 @@ fn detect_kind(database_url: &str) -> DbKind {
     }
 }
 
+/// SQLite URLs through the Any driver do not create a missing file the way
+/// the old `SqlitePoolOptions::connect_with(create_if_missing(true))` did,
+/// so plain paths are rewritten to the `file:…?mode=rwc` URI form — first
+/// boot must be able to create `crabcast.db`. Non-SQLite URLs and explicit
+/// `file:`/in-memory forms are passed through untouched.
+pub fn normalize_url(database_url: &str) -> String {
+    if detect_kind(database_url) != DbKind::Sqlite
+        || database_url.starts_with("sqlite:file:")
+        || database_url.contains('?')
+        || database_url == "sqlite::memory:"
+    {
+        return database_url.to_string();
+    }
+    let path = database_url.trim_start_matches("sqlite:");
+    format!("sqlite:file:{path}?mode=rwc")
+}
+
 /// RFC3339 UTC timestamp matching the stations table's `strftime` format.
 pub fn now() -> String {
     time::OffsetDateTime::now_utc()
@@ -163,12 +180,9 @@ pub async fn init(database_url: &str) -> anyhow::Result<AnyPool> {
     let kind = detect_kind(database_url);
     let _ = KIND.set(kind);
 
-    // Bare paths (e.g. "crabcast.db") are valid SQLite URLs.
-    let url = if kind == DbKind::Sqlite && !database_url.contains(':') {
-        format!("sqlite:{database_url}")
-    } else {
-        database_url.to_string()
-    };
+    // Bare paths (e.g. "crabcast.db") are valid SQLite URLs; the Any driver
+    // won't create a missing file, so plain paths get `?mode=rwc`.
+    let url = normalize_url(database_url);
 
     let pool = AnyPoolOptions::new()
         .max_connections(8)
@@ -181,4 +195,37 @@ pub async fn init(database_url: &str) -> anyhow::Result<AnyPool> {
     }
 
     Ok(pool)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_url;
+
+    #[test]
+    fn sqlite_urls_get_create_semantics() {
+        // Plain paths must be able to create the file on first boot.
+        assert_eq!(
+            normalize_url("crabcast.db"),
+            "sqlite:file:crabcast.db?mode=rwc"
+        );
+        assert_eq!(
+            normalize_url("sqlite:crabcast.db"),
+            "sqlite:file:crabcast.db?mode=rwc"
+        );
+        assert_eq!(
+            normalize_url("sqlite:/srv/crabcast/crabcast.db"),
+            "sqlite:file:/srv/crabcast/crabcast.db?mode=rwc"
+        );
+        // Explicit forms are left alone.
+        assert_eq!(normalize_url("sqlite::memory:"), "sqlite::memory:");
+        assert_eq!(
+            normalize_url("sqlite:file:db.db?mode=ro"),
+            "sqlite:file:db.db?mode=ro"
+        );
+        // Postgres URLs pass through untouched.
+        assert_eq!(
+            normalize_url("postgres://user:pass@host:5432/db"),
+            "postgres://user:pass@host:5432/db"
+        );
+    }
 }
