@@ -88,6 +88,11 @@ fn multipart_err(e: axum::extract::multipart::MultipartError) -> ApiError {
 
 async fn download_backup(State(state): State<AppState>, user: CurrentUser) -> ApiResult<Response> {
     require_super_admin(&user)?;
+    if crate::db::kind() == crate::db::DbKind::Postgres {
+        return Err(ApiError::bad_request(
+            "backup is SQLite-only for now (Postgres: use pg_dump)",
+        ));
+    }
 
     let media_dir = state.supervisor.media_root().clone();
     let configs_dir = state.supervisor.base_dir().join("configs");
@@ -261,6 +266,11 @@ async fn restore_backup(
     mut multipart: Multipart,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_super_admin(&user)?;
+    if crate::db::kind() == crate::db::DbKind::Postgres {
+        return Err(ApiError::bad_request(
+            "restore is SQLite-only for now (Postgres: use pg_restore)",
+        ));
+    }
 
     let mut data: Option<Vec<u8>> = None;
     while let Some(field) = multipart.next_field().await.map_err(multipart_err)? {

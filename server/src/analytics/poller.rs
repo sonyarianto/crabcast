@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 use tokio::time::sleep;
 
 use crate::analytics::{icecast, notify};
@@ -30,7 +30,7 @@ const DISK_FREE_MIN_BYTES: u64 = 1 << 30; // 1 GiB
 const DISK_FREE_MIN_PCT: f64 = 5.0;
 
 pub struct AnalyticsPoller {
-    pool: SqlitePool,
+    pool: AnyPool,
     supervisor: Supervisor,
     media_root: PathBuf,
     retention_days: i64,
@@ -39,7 +39,7 @@ pub struct AnalyticsPoller {
 }
 
 impl AnalyticsPoller {
-    pub fn new(pool: SqlitePool, supervisor: Supervisor, media_root: PathBuf) -> Self {
+    pub fn new(pool: AnyPool, supervisor: Supervisor, media_root: PathBuf) -> Self {
         let retention_days = std::env::var("CRABCAST_RETENTION_DAYS")
             .ok()
             .and_then(|v| v.parse().ok())

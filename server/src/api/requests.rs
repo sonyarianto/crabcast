@@ -133,7 +133,7 @@ async fn create_request(
 
     // Dedupe: a track that is already pending/queued (or in the engine
     // queue) is rejected.
-    if rules.dedupe {
+    if *rules.dedupe {
         if requests::already_requested(&state.pool, &station_id, &body.media_id).await? {
             return Err(ApiError {
                 status: StatusCode::BAD_REQUEST,
@@ -152,7 +152,7 @@ async fn create_request(
         }
     }
 
-    let moderated = rules.moderation;
+    let moderated = bool::from(rules.moderation);
     let req =
         requests::insert_request(&state.pool, &station_id, &body.media_id, None, moderated).await?;
 

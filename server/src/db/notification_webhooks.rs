@@ -3,8 +3,8 @@
 //! (started/stopped/crashed/blank).
 
 use serde::Serialize;
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 
@@ -17,7 +17,7 @@ pub struct NotificationWebhook {
     pub station_id: String,
     pub url: String,
     pub events: String,
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
     pub created_at: String,
 }
 
@@ -25,7 +25,7 @@ pub struct NotificationWebhook {
 pub struct WebhookInput {
     pub url: String,
     pub events: String,
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
 }
 
 /// Validate a comma-separated events string: '*' or a subset of EVENTS.
@@ -42,7 +42,7 @@ pub fn validate_events(events: &str) -> bool {
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     input: &WebhookInput,
 ) -> Result<NotificationWebhook, ApiError> {
@@ -58,7 +58,7 @@ pub async fn create(
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO notification_webhooks (id, station_id, url, events, enabled) \
-         VALUES (?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&id)
     .bind(station_id)
@@ -70,23 +70,20 @@ pub async fn create(
     get(pool, &id).await
 }
 
-pub async fn list(
-    pool: &SqlitePool,
-    station_id: &str,
-) -> Result<Vec<NotificationWebhook>, ApiError> {
+pub async fn list(pool: &AnyPool, station_id: &str) -> Result<Vec<NotificationWebhook>, ApiError> {
     Ok(sqlx::query_as::<_, NotificationWebhook>(
         "SELECT id, station_id, url, events, enabled, created_at \
-             FROM notification_webhooks WHERE station_id = ? ORDER BY created_at",
+             FROM notification_webhooks WHERE station_id = $1 ORDER BY created_at",
     )
     .bind(station_id)
     .fetch_all(pool)
     .await?)
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<NotificationWebhook, ApiError> {
+pub async fn get(pool: &AnyPool, id: &str) -> Result<NotificationWebhook, ApiError> {
     sqlx::query_as::<_, NotificationWebhook>(
         "SELECT id, station_id, url, events, enabled, created_at \
-         FROM notification_webhooks WHERE id = ?",
+         FROM notification_webhooks WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -94,8 +91,8 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<NotificationWebhook, Api
     .ok_or_else(|| ApiError::not_found("webhook", id))
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
-    let affected = sqlx::query("DELETE FROM notification_webhooks WHERE id = ?")
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<(), ApiError> {
+    let affected = sqlx::query("DELETE FROM notification_webhooks WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -107,15 +104,19 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
 
 /// Enabled webhooks for a station subscribed to `event`.
 pub async fn for_event(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     event: &str,
 ) -> Result<Vec<NotificationWebhook>, ApiError> {
-    Ok(sqlx::query_as::<_, NotificationWebhook>(
+    let enabled_true = match crate::db::kind() {
+        crate::db::DbKind::Postgres => "enabled = TRUE",
+        crate::db::DbKind::Sqlite => "enabled = 1",
+    };
+    Ok(sqlx::query_as::<_, NotificationWebhook>(&format!(
         "SELECT id, station_id, url, events, enabled, created_at \
              FROM notification_webhooks \
-             WHERE station_id = ? AND enabled = 1",
-    )
+             WHERE station_id = $1 AND {enabled_true}",
+    ))
     .bind(station_id)
     .fetch_all(pool)
     .await?

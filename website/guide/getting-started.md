@@ -54,7 +54,7 @@ create the initial admin account (email-less, argon2-hashed).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite:crabcast.db` | SQLite database file |
+| `DATABASE_URL` | `sqlite:crabcast.db` | SQLite file, or a `postgres://…` URL to run on Postgres (schema auto-migrates at boot) |
 | `BIND_ADDR` | `0.0.0.0:8080` | API listen address |
 | `CRABCAST_DATA_DIR` | `station-data` | Per-station configs + logs |
 | `CRABCAST_MEDIA_DIR` | `media` | Uploaded media + cover art |

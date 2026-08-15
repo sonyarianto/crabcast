@@ -142,7 +142,7 @@ async fn update_user(
 
     // The last super admin cannot demote or delete themselves; without this
     // the system could be left with no admin at all.
-    if row.is_super_admin && id == user.user.id && !input.is_super_admin {
+    if *row.is_super_admin && id == user.user.id && !input.is_super_admin {
         return Err(ApiError {
             status: StatusCode::BAD_REQUEST,
             message: "cannot demote the last super admin".into(),
@@ -193,7 +193,7 @@ async fn delete_user(
     let Some(row) = users::get(&state.pool, &id).await? else {
         return Err(ApiError::not_found("user", &id));
     };
-    if row.is_super_admin && id == user.user.id {
+    if *row.is_super_admin && id == user.user.id {
         return Err(ApiError {
             status: StatusCode::BAD_REQUEST,
             message: "cannot delete your own account".into(),

@@ -88,7 +88,7 @@ pub struct Supervisor {
     /// Outbound alert webhook (`CRABCAST_ALERT_WEBHOOK_URL`); crash-loop
     /// alerts raised by this supervisor are posted there.
     alert_webhook_url: Option<String>,
-    pool: sqlx::SqlitePool,
+    pool: sqlx::AnyPool,
     registry: Arc<Mutex<Registry>>,
 }
 
@@ -96,7 +96,7 @@ impl Supervisor {
     pub fn new(
         base_dir: impl Into<PathBuf>,
         media_root: impl Into<PathBuf>,
-        pool: sqlx::SqlitePool,
+        pool: sqlx::AnyPool,
     ) -> Self {
         let base_dir = base_dir.into();
         let media_root = media_root.into();

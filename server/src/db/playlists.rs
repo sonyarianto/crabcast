@@ -2,8 +2,8 @@
 //! schedules (Phase 4).
 
 use serde::{Deserialize, Serialize};
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 
@@ -19,8 +19,8 @@ pub struct Playlist {
     pub name: String,
     pub kind: String,
     pub weight: i64,
-    pub shuffle: bool,
-    pub enabled: bool,
+    pub shuffle: crate::db::DbBool,
+    pub enabled: crate::db::DbBool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -71,7 +71,7 @@ type TrackRow = (
 #[derive(Debug, Clone)]
 pub struct PlaylistSource {
     pub kind: String,
-    pub shuffle: bool,
+    pub shuffle: crate::db::DbBool,
     pub weight: i64,
     pub files: Vec<TrackSource>,
     pub schedules: Vec<PlaylistSchedule>,
@@ -80,17 +80,17 @@ pub struct PlaylistSource {
 const COLUMNS: &str =
     "id, station_id, name, kind, weight, shuffle, enabled, created_at, updated_at";
 
-pub async fn list(pool: &SqlitePool, station_id: &str) -> Result<Vec<Playlist>, ApiError> {
+pub async fn list(pool: &AnyPool, station_id: &str) -> Result<Vec<Playlist>, ApiError> {
     Ok(sqlx::query_as::<_, Playlist>(&format!(
-        "SELECT {COLUMNS} FROM playlists WHERE station_id = ? ORDER BY created_at"
+        "SELECT {COLUMNS} FROM playlists WHERE station_id = $1 ORDER BY created_at"
     ))
     .bind(station_id)
     .fetch_all(pool)
     .await?)
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<Playlist, ApiError> {
-    sqlx::query_as::<_, Playlist>(&format!("SELECT {COLUMNS} FROM playlists WHERE id = ?"))
+pub async fn get(pool: &AnyPool, id: &str) -> Result<Playlist, ApiError> {
+    sqlx::query_as::<_, Playlist>(&format!("SELECT {COLUMNS} FROM playlists WHERE id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -98,7 +98,7 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<Playlist, ApiError> {
 }
 
 /// Full detail: playlist + ordered tracks + schedules.
-pub async fn detail(pool: &SqlitePool, id: &str) -> Result<PlaylistDetail, ApiError> {
+pub async fn detail(pool: &AnyPool, id: &str) -> Result<PlaylistDetail, ApiError> {
     let playlist = get(pool, id).await?;
     Ok(PlaylistDetail {
         tracks: tracks(pool, id).await?,
@@ -108,7 +108,7 @@ pub async fn detail(pool: &SqlitePool, id: &str) -> Result<PlaylistDetail, ApiEr
 }
 
 pub async fn detail_for_station(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
 ) -> Result<Vec<PlaylistDetail>, ApiError> {
     let playlists = list(pool, station_id).await?;
@@ -131,9 +131,9 @@ pub struct PlaylistInput {
     #[serde(default = "default_weight")]
     pub weight: i64,
     #[serde(default)]
-    pub shuffle: bool,
+    pub shuffle: crate::db::DbBool,
     #[serde(default = "default_true")]
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
 }
 
 fn default_kind() -> String {
@@ -142,12 +142,12 @@ fn default_kind() -> String {
 fn default_weight() -> i64 {
     1
 }
-fn default_true() -> bool {
-    true
+fn default_true() -> crate::db::DbBool {
+    crate::db::DbBool(true)
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     input: &PlaylistInput,
 ) -> Result<Playlist, ApiError> {
@@ -170,7 +170,7 @@ pub async fn create(
     let now = crate::db::now();
     sqlx::query(
         "INSERT INTO playlists (id, station_id, name, kind, weight, shuffle, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
     )
     .bind(&id)
     .bind(station_id)
@@ -186,21 +186,18 @@ pub async fn create(
     get(pool, &id).await
 }
 
-pub async fn update(
-    pool: &SqlitePool,
-    id: &str,
-    input: &PlaylistInput,
-) -> Result<Playlist, ApiError> {
+pub async fn update(pool: &AnyPool, id: &str, input: &PlaylistInput) -> Result<Playlist, ApiError> {
     if input.name.trim().is_empty() {
         return Err(ApiError {
             status: axum::http::StatusCode::BAD_REQUEST,
             message: "playlist name must not be empty".into(),
         });
     }
-    let affected = sqlx::query(
-        "UPDATE playlists SET name = ?, kind = ?, weight = ?, shuffle = ?, enabled = ?, \
-         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
-    )
+    let affected = sqlx::query(&format!(
+        "UPDATE playlists SET name = $1, kind = $2, weight = $3, shuffle = $4, enabled = $5, \
+         updated_at = {} WHERE id = $6",
+        crate::db::now_sql(),
+    ))
     .bind(input.name.trim())
     .bind(&input.kind)
     .bind(input.weight.max(1))
@@ -215,8 +212,8 @@ pub async fn update(
     get(pool, id).await
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
-    let affected = sqlx::query("DELETE FROM playlists WHERE id = ?")
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<(), ApiError> {
+    let affected = sqlx::query("DELETE FROM playlists WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -226,23 +223,20 @@ pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
-async fn tracks(pool: &SqlitePool, playlist_id: &str) -> Result<Vec<PlaylistTrack>, ApiError> {
+async fn tracks(pool: &AnyPool, playlist_id: &str) -> Result<Vec<PlaylistTrack>, ApiError> {
     Ok(sqlx::query_as::<_, PlaylistTrack>(
         "SELECT id, media_id, position, fade_in, fade_out, cue_in, cue_out \
-             FROM playlist_tracks WHERE playlist_id = ? ORDER BY position",
+             FROM playlist_tracks WHERE playlist_id = $1 ORDER BY position",
     )
     .bind(playlist_id)
     .fetch_all(pool)
     .await?)
 }
 
-async fn schedules(
-    pool: &SqlitePool,
-    playlist_id: &str,
-) -> Result<Vec<PlaylistSchedule>, ApiError> {
+async fn schedules(pool: &AnyPool, playlist_id: &str) -> Result<Vec<PlaylistSchedule>, ApiError> {
     Ok(sqlx::query_as::<_, PlaylistSchedule>(
         "SELECT id, days, start_time, end_time FROM playlist_schedules \
-             WHERE playlist_id = ? ORDER BY start_time",
+             WHERE playlist_id = $1 ORDER BY start_time",
     )
     .bind(playlist_id)
     .fetch_all(pool)
@@ -253,12 +247,12 @@ async fn schedules(
 /// tail. Returns the number added (media already in the playlist are
 /// skipped — UNIQUE(playlist_id, media_id)).
 pub async fn add_tracks(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     playlist_id: &str,
     media_ids: &[String],
 ) -> Result<usize, ApiError> {
     let tail: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(position), -1) FROM playlist_tracks WHERE playlist_id = ?",
+        "SELECT COALESCE(MAX(position), -1) FROM playlist_tracks WHERE playlist_id = $1",
     )
     .bind(playlist_id)
     .fetch_one(pool)
@@ -267,7 +261,7 @@ pub async fn add_tracks(
     let mut pos = tail + 1;
     for media_id in media_ids {
         let exists: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = ? AND media_id = ?",
+            "SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = $1 AND media_id = $2",
         )
         .bind(playlist_id)
         .bind(media_id)
@@ -278,7 +272,7 @@ pub async fn add_tracks(
         }
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO playlist_tracks (id, playlist_id, media_id, position) VALUES (?, ?, ?, ?)",
+            "INSERT INTO playlist_tracks (id, playlist_id, media_id, position) VALUES ($1, $2, $3, $4)",
         )
         .bind(&id)
         .bind(playlist_id)
@@ -293,12 +287,12 @@ pub async fn add_tracks(
 }
 
 pub async fn remove_track(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     playlist_id: &str,
     media_id: &str,
 ) -> Result<(), ApiError> {
     let affected =
-        sqlx::query("DELETE FROM playlist_tracks WHERE playlist_id = ? AND media_id = ?")
+        sqlx::query("DELETE FROM playlist_tracks WHERE playlist_id = $1 AND media_id = $2")
             .bind(playlist_id)
             .bind(media_id)
             .execute(pool)
@@ -313,13 +307,13 @@ pub async fn remove_track(
 
 /// Reorder tracks to match `media_ids` order (the full ordered list).
 pub async fn reorder(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     playlist_id: &str,
     media_ids: &[String],
 ) -> Result<(), ApiError> {
     for (i, media_id) in media_ids.iter().enumerate() {
         sqlx::query(
-            "UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND media_id = ?",
+            "UPDATE playlist_tracks SET position = $1 WHERE playlist_id = $2 AND media_id = $3",
         )
         .bind(i as i64)
         .bind(playlist_id)
@@ -330,16 +324,16 @@ pub async fn reorder(
     Ok(())
 }
 
-async fn renumber(pool: &SqlitePool, playlist_id: &str) -> Result<(), ApiError> {
+async fn renumber(pool: &AnyPool, playlist_id: &str) -> Result<(), ApiError> {
     let rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT media_id, position FROM playlist_tracks WHERE playlist_id = ? ORDER BY position",
+        "SELECT media_id, position FROM playlist_tracks WHERE playlist_id = $1 ORDER BY position",
     )
     .bind(playlist_id)
     .fetch_all(pool)
     .await?;
     for (i, (media_id, _)) in rows.into_iter().enumerate() {
         sqlx::query(
-            "UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND media_id = ?",
+            "UPDATE playlist_tracks SET position = $1 WHERE playlist_id = $2 AND media_id = $3",
         )
         .bind(i as i64)
         .bind(playlist_id)
@@ -359,14 +353,14 @@ pub struct TrackOverrides {
 }
 
 pub async fn update_track_overrides(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     playlist_id: &str,
     media_id: &str,
     o: &TrackOverrides,
 ) -> Result<(), ApiError> {
     let affected = sqlx::query(
-        "UPDATE playlist_tracks SET fade_in = ?, fade_out = ?, cue_in = ?, cue_out = ? \
-         WHERE playlist_id = ? AND media_id = ?",
+        "UPDATE playlist_tracks SET fade_in = $1, fade_out = $2, cue_in = $3, cue_out = $4 \
+         WHERE playlist_id = $5 AND media_id = $6",
     )
     .bind(o.fade_in)
     .bind(o.fade_out)
@@ -391,7 +385,7 @@ pub struct ScheduleInput {
 }
 
 pub async fn add_schedule(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     playlist_id: &str,
     input: &ScheduleInput,
 ) -> Result<PlaylistSchedule, ApiError> {
@@ -400,7 +394,7 @@ pub async fn add_schedule(
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO playlist_schedules (id, playlist_id, days, start_time, end_time)
-         VALUES (?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&id)
     .bind(playlist_id)
@@ -410,7 +404,7 @@ pub async fn add_schedule(
     .execute(pool)
     .await?;
     let row = sqlx::query_as::<_, PlaylistSchedule>(
-        "SELECT id, days, start_time, end_time FROM playlist_schedules WHERE id = ?",
+        "SELECT id, days, start_time, end_time FROM playlist_schedules WHERE id = $1",
     )
     .bind(&id)
     .fetch_one(pool)
@@ -418,8 +412,8 @@ pub async fn add_schedule(
     Ok(row)
 }
 
-pub async fn delete_schedule(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
-    let affected = sqlx::query("DELETE FROM playlist_schedules WHERE id = ?")
+pub async fn delete_schedule(pool: &AnyPool, id: &str) -> Result<(), ApiError> {
+    let affected = sqlx::query("DELETE FROM playlist_schedules WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -448,7 +442,7 @@ fn validate_time(t: &str) -> Result<(), ApiError> {
 /// schedules — the input to the Lua generator. `media_root` is the storage
 /// root (files live at `{media_root}/{storage_path}`).
 pub async fn sources(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     media_root: &std::path::Path,
 ) -> Result<Vec<PlaylistSource>, ApiError> {
@@ -462,7 +456,7 @@ pub async fn sources(
             "SELECT pt.position, pt.fade_in, pt.fade_out, pt.cue_in, pt.cue_out, mf.storage_path
                  FROM playlist_tracks pt
                  JOIN media_files mf ON mf.id = pt.media_id
-                 WHERE pt.playlist_id = ?
+                 WHERE pt.playlist_id = $1
                  ORDER BY pt.position",
         )
         .bind(&p.id)
@@ -497,21 +491,19 @@ pub async fn sources(
 mod tests {
     use super::*;
 
-    async fn test_pool() -> SqlitePool {
+    async fn test_pool() -> AnyPool {
+        sqlx::any::install_default_drivers();
         // Single connection: in-memory SQLite is per-connection.
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(":memory:")
-            .create_if_missing(true);
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        let pool = sqlx::any::AnyPoolOptions::new()
             .max_connections(1)
-            .connect_with(options)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
         pool
     }
 
-    async fn seed_station(pool: &SqlitePool) -> String {
+    async fn seed_station(pool: &AnyPool) -> String {
         let id = "st1";
         sqlx::query(
             "INSERT INTO stations (id, name, description, sample_rate, channels, \
@@ -519,7 +511,7 @@ mod tests {
              jingles_dir, harbor_port, harbor_mount, harbor_password, control_port, \
              control_http_port, icecast_host, icecast_port, icecast_mount, icecast_format, \
              icecast_bitrate, icecast_source_user, icecast_source_password) \
-             VALUES (?, 'Test', '', 44100, 2, 4096, 3.0, 1.0, 1.5, '', '', 8005, '/live', 'dj', \
+             VALUES ($1, 'Test', '', 44100, 2, 4096, 3.0, 1.0, 1.5, '', '', 8005, '/live', 'dj', \
              1234, 9234, 'localhost', 8000, '/radio', 'mp3', 128000, 'source', 'hackme')",
         )
         .bind(id)
@@ -541,8 +533,8 @@ mod tests {
                 name: "Morning Mix".into(),
                 kind: KIND_STANDARD.into(),
                 weight: 2,
-                shuffle: true,
-                enabled: true,
+                shuffle: true.into(),
+                enabled: true.into(),
             },
         )
         .await
@@ -565,8 +557,8 @@ mod tests {
                 name: "Evening Mix".into(),
                 kind: KIND_LOOPING.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: false,
+                shuffle: false.into(),
+                enabled: false.into(),
             },
         )
         .await
@@ -589,8 +581,8 @@ mod tests {
                 name: "P".into(),
                 kind: KIND_STANDARD.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: true,
+                shuffle: false.into(),
+                enabled: true.into(),
             },
         )
         .await
@@ -601,7 +593,7 @@ mod tests {
             sqlx::query(
                 "INSERT INTO media_files (id, sha256, filename, mime, size_bytes, \
                  storage_path, title, waveform, created_at, updated_at) \
-                 VALUES (?, ?, ?, 'audio/mpeg', 1, ?, ?, '[]', '2026-01-01', '2026-01-01')",
+                 VALUES ($1, $2, $3, 'audio/mpeg', 1, $4, $5, '[]', '2026-01-01', '2026-01-01')",
             )
             .bind(mid)
             .bind(format!("sha{i}"))
@@ -684,8 +676,8 @@ mod tests {
                 name: "Daypart".into(),
                 kind: KIND_SCHEDULED.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: true,
+                shuffle: false.into(),
+                enabled: true.into(),
             },
         )
         .await
@@ -733,8 +725,8 @@ mod tests {
                 name: "P".into(),
                 kind: KIND_STANDARD.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: true,
+                shuffle: false.into(),
+                enabled: true.into(),
             },
         )
         .await
@@ -766,8 +758,8 @@ mod tests {
                 name: "Empty".into(),
                 kind: KIND_STANDARD.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: true,
+                shuffle: false.into(),
+                enabled: true.into(),
             },
         )
         .await
@@ -786,8 +778,8 @@ mod tests {
                 name: "P".into(),
                 kind: KIND_STANDARD.into(),
                 weight: 1,
-                shuffle: false,
-                enabled: false,
+                shuffle: false.into(),
+                enabled: false.into(),
             },
         )
         .await

@@ -1,7 +1,7 @@
 //! Song history rows, pushed from the engine's track webhook.
 
 use serde::Serialize;
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{AnyPool, FromRow};
 
 use crate::api::error::ApiError;
 
@@ -16,21 +16,18 @@ pub struct SongHistory {
 
 /// Record a new track: close the previous open row (if any) and insert a
 /// new one. Returns the new row.
-pub async fn push(
-    pool: &SqlitePool,
-    station_id: &str,
-    title: &str,
-) -> Result<SongHistory, ApiError> {
-    sqlx::query(
-        "UPDATE song_history SET ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
-WHERE station_id = ? AND ended_at IS NULL",
-    )
+pub async fn push(pool: &AnyPool, station_id: &str, title: &str) -> Result<SongHistory, ApiError> {
+    sqlx::query(&format!(
+        "UPDATE song_history SET ended_at = {} \
+WHERE station_id = $1 AND ended_at IS NULL",
+        crate::db::now_sql(),
+    ))
     .bind(station_id)
     .execute(pool)
     .await?;
 
     let row = sqlx::query_as::<_, SongHistory>(
-        "INSERT INTO song_history (station_id, title) VALUES (?, ?) \
+        "INSERT INTO song_history (station_id, title) VALUES ($1, $2) \
 RETURNING id, station_id, title, started_at, ended_at",
     )
     .bind(station_id)
@@ -42,12 +39,12 @@ RETURNING id, station_id, title, started_at, ended_at",
 
 /// The currently playing track (latest row without `ended_at`), if any.
 pub async fn now_playing(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
 ) -> Result<Option<SongHistory>, ApiError> {
     Ok(sqlx::query_as::<_, SongHistory>(
         "SELECT id, station_id, title, started_at, ended_at FROM song_history \
-WHERE station_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
+WHERE station_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
     )
     .bind(station_id)
     .fetch_optional(pool)
@@ -56,13 +53,13 @@ WHERE station_id = ? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1",
 
 /// Recent history for a station (newest first).
 pub async fn recent(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     limit: i64,
 ) -> Result<Vec<SongHistory>, ApiError> {
     Ok(sqlx::query_as::<_, SongHistory>(
         "SELECT id, station_id, title, started_at, ended_at FROM song_history \
-WHERE station_id = ? ORDER BY started_at DESC LIMIT ?",
+WHERE station_id = $1 ORDER BY started_at DESC LIMIT $2",
     )
     .bind(station_id)
     .bind(limit)

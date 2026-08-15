@@ -139,7 +139,7 @@ pub fn render(
         station.name,
         station.description,
     );
-    if station.hls_enabled {
+    if *station.hls_enabled {
         // A second tap of the same root source: the engine slices AAC into
         // MPEG-TS segments under the station's HLS dir (created on connect,
         // stale files cleared). The public page serves them from
@@ -182,7 +182,7 @@ pub fn render_playlist_sources(s: &mut String, playlists: &[PlaylistSource], fal
     for (i, p) in enabled.iter().enumerate() {
         let shuffle = if p.kind == "looping" {
             "false"
-        } else if p.shuffle {
+        } else if *p.shuffle {
             "true"
         } else {
             "false"
@@ -380,7 +380,7 @@ mod tests {
             icecast_bitrate: 128000,
             icecast_source_user: "source".into(),
             icecast_source_password: "hackme".into(),
-            hls_enabled: false,
+            hls_enabled: false.into(),
             hls_dir: String::new(),
             hls_segment_seconds: 5.0,
             hls_retention: 12,
@@ -394,7 +394,7 @@ mod tests {
     fn source(kind: &str, files: &[&str]) -> PlaylistSource {
         PlaylistSource {
             kind: kind.into(),
-            shuffle: false,
+            shuffle: false.into(),
             weight: 1,
             files: files
                 .iter()
@@ -465,7 +465,7 @@ mod tests {
         );
         assert!(!off.contains("output.hls"), "no HLS line expected:\n{off}");
 
-        st.hls_enabled = true;
+        st.hls_enabled = true.into();
         st.hls_dir = "/srv/hls/test-radio".into();
         st.hls_segment_seconds = 4.0;
         st.hls_retention = 20;
@@ -545,7 +545,7 @@ mod tests {
     fn annotate_overrides_are_embedded() {
         let pl = vec![PlaylistSource {
             kind: "standard".into(),
-            shuffle: true,
+            shuffle: true.into(),
             weight: 1,
             files: vec![(
                 "/media/a.mp3".into(),

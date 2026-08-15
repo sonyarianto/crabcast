@@ -47,10 +47,36 @@ async fn main() -> anyhow::Result<()> {
     let poller = AnalyticsPoller::new(pool.clone(), supervisor.clone(), media_dir.clone().into());
     tokio::spawn(async move { poller.run().await });
 
+    // Sessions use a scheme-typed store (tower-sessions needs a concrete
+    // pool, so it gets its own from the same URL rather than the AnyPool).
+    let session_store = match db::kind() {
+        db::DbKind::Postgres => {
+            auth::SessionStoreAny::Postgres(tower_sessions_sqlx_store::PostgresStore::new(
+                sqlx::postgres::PgPoolOptions::new()
+                    .max_connections(4)
+                    .connect(&database_url)
+                    .await?,
+            ))
+        }
+        db::DbKind::Sqlite => {
+            let url = if database_url.contains(':') {
+                database_url.clone()
+            } else {
+                format!("sqlite:{database_url}")
+            };
+            auth::SessionStoreAny::Sqlite(tower_sessions_sqlx_store::SqliteStore::new(
+                sqlx::sqlite::SqlitePoolOptions::new()
+                    .max_connections(4)
+                    .connect(&url)
+                    .await?,
+            ))
+        }
+    };
+
     let app = api::router(pool.clone(), supervisor.clone(), storage)
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
-        .layer(auth::session_layer(pool, auth::session_key()));
+        .layer(auth::session_layer(session_store, auth::session_key()));
 
     let addr: SocketAddr = bind.parse()?;
     let listener = TcpListener::bind(addr).await?;

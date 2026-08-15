@@ -153,11 +153,17 @@ async fn history_csv(
     let since = (OffsetDateTime::now_utc() - time::Duration::days(days))
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
-    let rows = sqlx::query_as::<_, HistoryCsvRow>(
+    let duration = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => "(julianday(ended_at) - julianday(started_at)) * 86400.0",
+        crate::db::DbKind::Postgres => {
+            "((EXTRACT(EPOCH FROM ended_at::timestamptz) - EXTRACT(EPOCH FROM started_at::timestamptz)))::float8"
+        }
+    };
+    let rows = sqlx::query_as::<_, HistoryCsvRow>(&format!(
         "SELECT title, started_at, ended_at, \
-CASE WHEN ended_at IS NOT NULL THEN (julianday(ended_at) - julianday(started_at)) * 86400.0 END AS duration_seconds \
-FROM song_history WHERE station_id = ? AND started_at >= ? ORDER BY started_at DESC LIMIT 100000",
-    )
+CASE WHEN ended_at IS NOT NULL THEN {duration} END AS duration_seconds \
+FROM song_history WHERE station_id = $1 AND started_at >= $2 ORDER BY started_at DESC LIMIT 100000",
+    ))
     .bind(&id)
     .bind(since)
     .fetch_all(&state.pool)
@@ -304,7 +310,7 @@ async fn blank_webhook(
 
 /// Resolve an open `dead_air` alert once the engine reports a real track
 /// again (called from the track webhook receiver).
-pub async fn clear_dead_air(pool: &sqlx::SqlitePool, station_id: &str) {
+pub async fn clear_dead_air(pool: &sqlx::AnyPool, station_id: &str) {
     match analytics::resolve_open(pool, Some(station_id), "dead_air").await {
         Ok(0) => {}
         Ok(_) => tracing::info!("station {station_id}: audio recovered, dead-air alert cleared"),

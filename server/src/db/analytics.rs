@@ -3,8 +3,8 @@
 //! retention cleanup.
 
 use serde::Serialize;
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 use time::Duration;
 use time::OffsetDateTime;
 
@@ -22,7 +22,7 @@ pub struct ListenerSample {
     pub ts: String,
     pub listeners: i64,
     pub listener_connections: i64,
-    pub reachable: bool,
+    pub reachable: crate::db::DbBool,
 }
 
 /// One bucketed point of a listener series (AVG per bucket).
@@ -38,7 +38,7 @@ pub struct ListenerPoint {
 }
 
 pub async fn insert_sample(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     listeners: i64,
     listener_connections: i64,
@@ -46,7 +46,7 @@ pub async fn insert_sample(
 ) -> Result<(), ApiError> {
     sqlx::query(
         "INSERT INTO listener_samples (station_id, ts, listeners, listener_connections, reachable) \
-VALUES (?, ?, ?, ?, ?)",
+VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(station_id)
     .bind(now())
@@ -61,33 +61,50 @@ VALUES (?, ?, ?, ?, ?)",
 /// Bucketed listener series between `from` and `to` (RFC3339, inclusive),
 /// averaged per `bucket_minutes`. Returns points ordered by time.
 pub async fn listener_series(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     from: &str,
     to: &str,
     bucket_minutes: i64,
 ) -> Result<Vec<ListenerPoint>, ApiError> {
     let bucket_seconds = bucket_minutes.max(1) * 60;
-    let rows = sqlx::query_as::<_, ListenerPoint>(
-        "SELECT \
-datetime((strftime('%s', ts) / ?) * ?, 'unixepoch') AS ts, \
+    let sql = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => {
+            "SELECT \
+datetime((strftime('%s', ts) / $1) * $2, 'unixepoch') AS ts, \
 CAST(ROUND(AVG(listeners)) AS INTEGER) AS listeners, \
 CAST(ROUND(AVG(listener_connections)) AS INTEGER) AS connections, \
 COUNT(*) AS samples, \
 SUM(CASE WHEN reachable THEN 1 ELSE 0 END) AS reachable \
 FROM listener_samples \
-WHERE station_id = ? AND ts >= ? AND ts <= ? \
-GROUP BY (strftime('%s', ts) / ?) \
-ORDER BY ts",
-    )
-    .bind(bucket_seconds)
-    .bind(bucket_seconds)
-    .bind(station_id)
-    .bind(from)
-    .bind(to)
-    .bind(bucket_seconds)
-    .fetch_all(pool)
-    .await?;
+WHERE station_id = $3 AND ts >= $4 AND ts <= $5 \
+GROUP BY (strftime('%s', ts) / $6) \
+ORDER BY ts"
+        }
+        crate::db::DbKind::Postgres => {
+            "SELECT \
+to_char(to_timestamp((floor(EXTRACT(EPOCH FROM ts::timestamptz) / $1)) * $2), \
+'YYYY-MM-DD HH24:MI:SS') AS ts, \
+CAST(ROUND(AVG(listeners)) AS BIGINT) AS listeners, \
+CAST(ROUND(AVG(listener_connections)) AS BIGINT) AS connections, \
+COUNT(*) AS samples, \
+SUM(CASE WHEN reachable THEN 1 ELSE 0 END) AS reachable \
+FROM listener_samples \
+WHERE station_id = $3 AND ts >= $4 AND ts <= $5 \
+GROUP BY to_char(to_timestamp((floor(EXTRACT(EPOCH FROM ts::timestamptz) / $1)) * $2), \
+'YYYY-MM-DD HH24:MI:SS') \
+ORDER BY ts"
+        }
+    };
+    let rows = sqlx::query_as::<_, ListenerPoint>(sql)
+        .bind(bucket_seconds)
+        .bind(bucket_seconds)
+        .bind(station_id)
+        .bind(from)
+        .bind(to)
+        .bind(bucket_seconds)
+        .fetch_all(pool)
+        .await?;
     // SQLite's datetime() renders 'YYYY-MM-DD HH:MM:SS'; normalize to the
     // RFC3339 shape the rest of the API uses.
     Ok(rows
@@ -101,12 +118,12 @@ ORDER BY ts",
 
 /// Latest sample (for the "current listeners" stat), if any.
 pub async fn latest_sample(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
 ) -> Result<Option<ListenerSample>, ApiError> {
     Ok(sqlx::query_as::<_, ListenerSample>(
         "SELECT id, station_id, ts, listeners, listener_connections, reachable \
-FROM listener_samples WHERE station_id = ? ORDER BY ts DESC LIMIT 1",
+FROM listener_samples WHERE station_id = $1 ORDER BY ts DESC LIMIT 1",
     )
     .bind(station_id)
     .fetch_optional(pool)
@@ -127,14 +144,14 @@ pub struct AnalyticsSummary {
     pub requests_today: i64,
 }
 
-pub async fn summary(pool: &SqlitePool, station_id: &str) -> Result<AnalyticsSummary, ApiError> {
+pub async fn summary(pool: &AnyPool, station_id: &str) -> Result<AnalyticsSummary, ApiError> {
     let latest = latest_sample(pool, station_id).await?;
     let day_ago = rfc3339_days_ago(1);
     let today = today_start();
 
     let unique: Option<i64> = sqlx::query_scalar(
         "SELECT MAX(listener_connections) - MIN(listener_connections) \
-FROM listener_samples WHERE station_id = ? AND ts >= ?",
+FROM listener_samples WHERE station_id = $1 AND ts >= $2",
     )
     .bind(station_id)
     .bind(&day_ago)
@@ -143,7 +160,7 @@ FROM listener_samples WHERE station_id = ? AND ts >= ?",
 
     let uptime: Option<f64> = sqlx::query_scalar(
         "SELECT CAST(100.0 * SUM(CASE WHEN reachable THEN 1 ELSE 0 END) / COUNT(*) AS REAL) \
-FROM listener_samples WHERE station_id = ? AND ts >= ?",
+FROM listener_samples WHERE station_id = $1 AND ts >= $2",
     )
     .bind(station_id)
     .bind(&day_ago)
@@ -151,7 +168,7 @@ FROM listener_samples WHERE station_id = ? AND ts >= ?",
     .await?;
 
     let plays_today: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM song_history WHERE station_id = ? AND started_at >= ?",
+        "SELECT COUNT(*) FROM song_history WHERE station_id = $1 AND started_at >= $2",
     )
     .bind(station_id)
     .bind(&today)
@@ -159,7 +176,7 @@ FROM listener_samples WHERE station_id = ? AND ts >= ?",
     .await?;
 
     let requests_today: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM requests WHERE station_id = ? AND created_at >= ?",
+        "SELECT COUNT(*) FROM requests WHERE station_id = $1 AND created_at >= $2",
     )
     .bind(station_id)
     .bind(&today)
@@ -189,20 +206,26 @@ pub struct TopSong {
 }
 
 pub async fn top_songs(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     days: i64,
     limit: i64,
 ) -> Result<Vec<TopSong>, ApiError> {
-    Ok(sqlx::query_as::<_, TopSong>(
+    let duration = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => "(julianday(ended_at) - julianday(started_at)) * 86400.0",
+        crate::db::DbKind::Postgres => {
+            "((EXTRACT(EPOCH FROM ended_at::timestamptz) - EXTRACT(EPOCH FROM started_at::timestamptz)))::float8"
+        }
+    };
+    Ok(sqlx::query_as::<_, TopSong>(&format!(
         "SELECT title, COUNT(*) AS plays, \
 COALESCE(SUM(CASE WHEN ended_at IS NOT NULL \
-  THEN (julianday(ended_at) - julianday(started_at)) * 86400.0 ELSE 0.0 END), 0.0) AS total_seconds, \
+  THEN {duration} ELSE 0.0 END), 0.0) AS total_seconds, \
 MAX(started_at) AS last_played_at \
 FROM song_history \
-WHERE station_id = ? AND started_at >= ? AND title != '' \
-GROUP BY title ORDER BY plays DESC, last_played_at DESC LIMIT ?",
-    )
+WHERE station_id = $1 AND started_at >= $2 AND title != '' \
+GROUP BY title ORDER BY plays DESC, last_played_at DESC LIMIT $3",
+    ))
     .bind(station_id)
     .bind(rfc3339_days_ago(days))
     .bind(limit)
@@ -221,18 +244,22 @@ pub struct RequestDay {
 
 /// Requests per calendar day (oldest first) for the last `days` days.
 pub async fn request_stats(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     days: i64,
 ) -> Result<Vec<RequestDay>, ApiError> {
-    Ok(sqlx::query_as::<_, RequestDay>(
-        "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS total, \
+    let day_expr = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => "substr(created_at, 1, 10)",
+        crate::db::DbKind::Postgres => "substring(created_at, 1, 10)",
+    };
+    Ok(sqlx::query_as::<_, RequestDay>(&format!(
+        "SELECT {day_expr} AS day, COUNT(*) AS total, \
 SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) AS accepted, \
 SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected, \
 SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending \
-FROM requests WHERE station_id = ? AND created_at >= ? \
+FROM requests WHERE station_id = $1 AND created_at >= $2 \
 GROUP BY day ORDER BY day",
-    )
+    ))
     .bind(station_id)
     .bind(rfc3339_days_ago(days))
     .fetch_all(pool)
@@ -259,16 +286,20 @@ pub struct Alert {
 /// Returns the new alert (caller decides whether to notify) or `None` when
 /// deduplicated.
 pub async fn raise_alert(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: Option<&str>,
     kind: &str,
     severity: &str,
     title: &str,
     detail: &str,
 ) -> Result<Option<Alert>, ApiError> {
-    let open: Option<i64> = sqlx::query_scalar(
-        "SELECT 1 FROM alerts WHERE station_id IS ? AND kind = ? AND resolved_at IS NULL LIMIT 1",
-    )
+    let match_scope = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => "station_id IS $1",
+        crate::db::DbKind::Postgres => "station_id IS NOT DISTINCT FROM $1",
+    };
+    let open: Option<i64> = sqlx::query_scalar(&format!(
+        "SELECT 1 FROM alerts WHERE {match_scope} AND kind = $2 AND resolved_at IS NULL LIMIT 1",
+    ))
     .bind(station_id)
     .bind(kind)
     .fetch_optional(pool)
@@ -280,7 +311,7 @@ pub async fn raise_alert(
     let ts = now();
     sqlx::query(
         "INSERT INTO alerts (id, station_id, kind, severity, title, detail, created_at) \
-VALUES (?, ?, ?, ?, ?, ?, ?)",
+VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(&id)
     .bind(station_id)
@@ -305,9 +336,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?)",
 
 /// Resolve a single alert by id; returns false when it does not exist or is
 /// already resolved.
-pub async fn resolve_alert(pool: &SqlitePool, id: &str) -> Result<bool, ApiError> {
+pub async fn resolve_alert(pool: &AnyPool, id: &str) -> Result<bool, ApiError> {
     let affected =
-        sqlx::query("UPDATE alerts SET resolved_at = ? WHERE id = ? AND resolved_at IS NULL")
+        sqlx::query("UPDATE alerts SET resolved_at = $1 WHERE id = $2 AND resolved_at IS NULL")
             .bind(now())
             .bind(id)
             .execute(pool)
@@ -318,13 +349,18 @@ pub async fn resolve_alert(pool: &SqlitePool, id: &str) -> Result<bool, ApiError
 /// Resolve every open alert for a (station, kind) — used when a condition
 /// clears. Returns the number resolved (for notification).
 pub async fn resolve_open(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: Option<&str>,
     kind: &str,
 ) -> Result<usize, ApiError> {
-    let affected = sqlx::query(
-        "UPDATE alerts SET resolved_at = ? WHERE station_id IS ? AND kind = ? AND resolved_at IS NULL",
-    )
+    // SQLite accepts `IS $2`; Postgres requires the null-safe equality form.
+    let match_scope = match crate::db::kind() {
+        crate::db::DbKind::Sqlite => "station_id IS $2",
+        crate::db::DbKind::Postgres => "station_id IS NOT DISTINCT FROM $2",
+    };
+    let affected = sqlx::query(&format!(
+        "UPDATE alerts SET resolved_at = $1 WHERE {match_scope} AND kind = $3 AND resolved_at IS NULL",
+    ))
     .bind(now())
     .bind(station_id)
     .bind(kind)
@@ -337,7 +373,7 @@ pub async fn resolve_open(
 /// global alerts when `Some` matches none — pass `None` to see every
 /// alert regardless of scope).
 pub async fn list_alerts(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: Option<&str>,
     open_only: bool,
     limit: i64,
@@ -345,26 +381,26 @@ pub async fn list_alerts(
     let (sql, bound) = match (station_id, open_only) {
         (Some(s), true) => (
             "SELECT id, station_id, kind, severity, title, detail, created_at, resolved_at \
-FROM alerts WHERE station_id = ? AND resolved_at IS NULL \
-ORDER BY created_at DESC LIMIT ?",
+FROM alerts WHERE station_id = $1 AND resolved_at IS NULL \
+ORDER BY created_at DESC LIMIT $2",
             Some(s.to_string()),
         ),
         (Some(s), false) => (
             "SELECT id, station_id, kind, severity, title, detail, created_at, resolved_at \
-FROM alerts WHERE station_id = ? \
-ORDER BY created_at DESC LIMIT ?",
+FROM alerts WHERE station_id = $1 \
+ORDER BY created_at DESC LIMIT $2",
             Some(s.to_string()),
         ),
         (None, true) => (
             "SELECT id, station_id, kind, severity, title, detail, created_at, resolved_at \
 FROM alerts WHERE resolved_at IS NULL \
-ORDER BY created_at DESC LIMIT ?",
+ORDER BY created_at DESC LIMIT $1",
             None,
         ),
         (None, false) => (
             "SELECT id, station_id, kind, severity, title, detail, created_at, resolved_at \
 FROM alerts \
-ORDER BY created_at DESC LIMIT ?",
+ORDER BY created_at DESC LIMIT $1",
             None,
         ),
     };
@@ -375,10 +411,10 @@ ORDER BY created_at DESC LIMIT ?",
     Ok(q.bind(limit).fetch_all(pool).await?)
 }
 
-pub async fn get_alert(pool: &SqlitePool, id: &str) -> Result<Alert, ApiError> {
+pub async fn get_alert(pool: &AnyPool, id: &str) -> Result<Alert, ApiError> {
     sqlx::query_as::<_, Alert>(
         "SELECT id, station_id, kind, severity, title, detail, created_at, resolved_at \
-FROM alerts WHERE id = ?",
+FROM alerts WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -393,13 +429,13 @@ FROM alerts WHERE id = ?",
 /// Delete analytics rows older than `retention_days`: listener samples,
 /// song history, and resolved alerts (open alerts are kept so a condition
 /// is not silently forgotten). Returns rows deleted for logging.
-pub async fn purge(pool: &SqlitePool, retention_days: i64) -> Result<i64, ApiError> {
+pub async fn purge(pool: &AnyPool, retention_days: i64) -> Result<i64, ApiError> {
     let cutoff = rfc3339_days_ago(retention_days);
     let mut total = 0i64;
     for sql in [
-        "DELETE FROM listener_samples WHERE ts < ?",
-        "DELETE FROM song_history WHERE started_at < ?",
-        "DELETE FROM alerts WHERE resolved_at IS NOT NULL AND created_at < ?",
+        "DELETE FROM listener_samples WHERE ts < $1",
+        "DELETE FROM song_history WHERE started_at < $1",
+        "DELETE FROM alerts WHERE resolved_at IS NOT NULL AND created_at < $1",
     ] {
         let affected = sqlx::query(sql).bind(&cutoff).execute(pool).await?;
         total += affected.rows_affected() as i64;
@@ -428,18 +464,19 @@ fn today_start() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::SqlitePool;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::AnyPool;
+    use sqlx::any::AnyPoolOptions;
 
-    async fn test_pool() -> SqlitePool {
-        SqlitePoolOptions::new()
+    async fn test_pool() -> AnyPool {
+        sqlx::any::install_default_drivers();
+        AnyPoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .expect("pool")
     }
 
-    async fn seed(pool: &SqlitePool) {
+    async fn seed(pool: &AnyPool) {
         sqlx::query("CREATE TABLE stations (id TEXT PRIMARY KEY, name TEXT NOT NULL)")
             .execute(pool)
             .await
@@ -520,7 +557,7 @@ title TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT)",
             ),
             ("Song B", "2026-08-01T12:00:00.000Z", None),
         ] {
-            sqlx::query("INSERT INTO song_history (station_id, title, started_at, ended_at) VALUES (?, ?, ?, ?)")
+            sqlx::query("INSERT INTO song_history (station_id, title, started_at, ended_at) VALUES ($1, $2, $3, $4)")
                 .bind(station)
                 .bind(title)
                 .bind(started)
@@ -551,7 +588,7 @@ VALUES ('m1', 'h1', 'a.mp3', 10, 'p1', '2026-08-01T00:00:00.000Z', '2026-08-01T0
         ] {
             sqlx::query(
                 "INSERT INTO requests (id, station_id, media_id, status, created_at, updated_at) \
-VALUES (?, ?, 'm1', ?, ?, ?)",
+VALUES ($1, $2, 'm1', $3, $4, $5)",
             )
             .bind(uuid::Uuid::new_v4().to_string())
             .bind(station)
@@ -640,7 +677,7 @@ VALUES (?, ?, 'm1', ?, ?, ?)",
         // Purge removes old resolved alerts but keeps open ones.
         let mut old = list_alerts(&pool, None, false, 100).await.unwrap();
         old[0].created_at = "2020-01-01T00:00:00.000Z".into();
-        sqlx::query("UPDATE alerts SET created_at = ?, resolved_at = ? WHERE id = ?")
+        sqlx::query("UPDATE alerts SET created_at = $1, resolved_at = $2 WHERE id = $3")
             .bind(&old[0].created_at)
             .bind(now())
             .bind(&old[0].id)

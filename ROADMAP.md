@@ -283,9 +283,12 @@ tolerance; a forced dead-air episode raises an alert.### Phase 9 — Performance
 - [x] Benchmarks (criterion in `server/` + load tests): API p95, station startup,
       CPU/RAM per station at idle and under playout. Re-baseline
       against AzuraCast's known numbers (documented in this file).
-- [ ] Postgres feature flag (sqlx) for multi-host deployments (big
-      dual-driver port: ~107 query sites + SQLite dialect functions +
-      PG migrations; deferred — see Done).
+- [x] Postgres feature flag (sqlx) for multi-host deployments: the
+      backend is dialect-agnostic — `DATABASE_URL` scheme picks SQLite
+      or Postgres at boot (dual migration sets, `$N` placeholders, a
+      `DbBool` wrapper, and dialect branches for the handful of
+      SQLite-only expressions; verified live against Postgres 16).
+      See Done for the full write-up.
 - [x] Shared SSE/event bus via Redis pub/sub (optional, behind
       `CRABCAST_REDIS_URL`).
 - [x] CDN-friendly static serving for media/cover art; cache headers.
@@ -716,11 +719,24 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   SQLite DBs sharing one Redis — a track webhook posted to host A arrived
   on host B's SSE stream; the no-Redis local path was regression-tested
   (SSE delivered in-process, no Redis configured). Docs updated
-  (`CRABCAST_REDIS_URL` in the site env table + packaging README). The
-  Postgres feature flag is still open: it is a large dual-driver port
-  (~107 sqlx query sites, SQLite `strftime`/`julianday`/`datetime`
-  dialect functions, placeholder styles, PG migration variants) that is
-  being handled as a separate effort.
+  (`CRABCAST_REDIS_URL` in the site env table + packaging README).
+
+- **Phase 9 — Postgres backend** (2026-08-15): the dual-driver port.
+  The server now runs on sqlx's **Any driver**: `DATABASE_URL` scheme
+  selects SQLite (default) or Postgres at boot; migrations are dual
+  (`migrations/` + `migrations-pg/`, run by kind), every query uses
+  `$N` placeholders (mapped to named params on SQLite, native on
+  Postgres), a `DbBool` decode wrapper spans SQLite `INTEGER` and PG
+  `BOOLEAN` columns, and the SQLite-only expressions (strftime/
+  julianday/substr timestamps, `IS ?`, literal `0/1` booleans, bucket
+  math) got small dialect branches (to_char/EXTRACT(EPOCH)/substring,
+  `IS NOT DISTINCT FROM`, TRUE/FALSE). Sessions use a scheme-typed
+  store (`tower_sessions.session` on PG). Backup/restore stays
+  SQLite-only (VACUUM INTO file swap) and returns a clear error on PG.
+  Verified: 61 SQLite tests pass through Any; full API e2e against a
+  real Postgres 16 container (auth/sessions, station+playlist+
+  streamer+request CRUD, analytics bucket/top-songs/CSV, webhooks,
+  backup gate). Known gap: `pg_dump`-based backup/restore.
 
 - **Phase 9 — Horizontal-scale story** (2026-08-15): new docs-site page
   `guide/scaling.md` laying out the three deployment models (single host,

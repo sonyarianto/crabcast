@@ -2,8 +2,8 @@
 //! moderation), the request log, and moderation actions.
 
 use serde::{Deserialize, Serialize};
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 use crate::db::now;
@@ -11,10 +11,10 @@ use crate::db::now;
 #[derive(Debug, Clone, Serialize, FromRow)]
 pub struct RequestRules {
     pub station_id: String,
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
     pub max_per_hour: i64,
-    pub dedupe: bool,
-    pub moderation: bool,
+    pub dedupe: crate::db::DbBool,
+    pub moderation: crate::db::DbBool,
 }
 
 #[derive(Debug, Clone, Serialize, FromRow)]
@@ -75,26 +75,26 @@ pub struct RequestDetail {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RequestRulesInput {
     #[serde(default)]
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
     #[serde(default = "default_max")]
     pub max_per_hour: i64,
     #[serde(default = "default_true")]
-    pub dedupe: bool,
+    pub dedupe: crate::db::DbBool,
     #[serde(default)]
-    pub moderation: bool,
+    pub moderation: crate::db::DbBool,
 }
 
 fn default_max() -> i64 {
     5
 }
-fn default_true() -> bool {
-    true
+fn default_true() -> crate::db::DbBool {
+    crate::db::DbBool(true)
 }
 
 /// Default (disabled) rules row for a station; insert-or-get.
-pub async fn ensure_rules(pool: &SqlitePool, station_id: &str) -> Result<RequestRules, ApiError> {
+pub async fn ensure_rules(pool: &AnyPool, station_id: &str) -> Result<RequestRules, ApiError> {
     let existing = sqlx::query_as::<_, RequestRules>(
-        "SELECT station_id, enabled, max_per_hour, dedupe, moderation FROM request_rules WHERE station_id = ?",
+        "SELECT station_id, enabled, max_per_hour, dedupe, moderation FROM request_rules WHERE station_id = $1",
     )
     .bind(station_id)
     .fetch_optional(pool)
@@ -102,16 +102,23 @@ pub async fn ensure_rules(pool: &SqlitePool, station_id: &str) -> Result<Request
     if let Some(r) = existing {
         return Ok(r);
     }
-    sqlx::query("INSERT INTO request_rules (station_id, enabled, max_per_hour, dedupe, moderation) VALUES (?, 0, 5, 1, 0)")
-        .bind(station_id)
-        .execute(pool)
-        .await?;
+    // Default row: booleans are 0/1 on SQLite, TRUE/FALSE on Postgres.
+    let defaults = match crate::db::kind() {
+        crate::db::DbKind::Postgres => "($1, FALSE, 5, TRUE, FALSE)",
+        crate::db::DbKind::Sqlite => "($1, 0, 5, 1, 0)",
+    };
+    sqlx::query(&format!(
+        "INSERT INTO request_rules (station_id, enabled, max_per_hour, dedupe, moderation) VALUES {defaults}"
+    ))
+    .bind(station_id)
+    .execute(pool)
+    .await?;
     get_rules(pool, station_id).await
 }
 
-pub async fn get_rules(pool: &SqlitePool, station_id: &str) -> Result<RequestRules, ApiError> {
+pub async fn get_rules(pool: &AnyPool, station_id: &str) -> Result<RequestRules, ApiError> {
     let row = sqlx::query_as::<_, RequestRules>(
-        "SELECT station_id, enabled, max_per_hour, dedupe, moderation FROM request_rules WHERE station_id = ?",
+        "SELECT station_id, enabled, max_per_hour, dedupe, moderation FROM request_rules WHERE station_id = $1",
     )
     .bind(station_id)
     .fetch_optional(pool)
@@ -121,7 +128,7 @@ pub async fn get_rules(pool: &SqlitePool, station_id: &str) -> Result<RequestRul
 }
 
 pub async fn update_rules(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     input: &RequestRulesInput,
 ) -> Result<RequestRules, ApiError> {
@@ -130,7 +137,7 @@ pub async fn update_rules(
     }
     ensure_rules(pool, station_id).await?;
     sqlx::query(
-        "UPDATE request_rules SET enabled = ?, max_per_hour = ?, dedupe = ?, moderation = ? WHERE station_id = ?",
+        "UPDATE request_rules SET enabled = $1, max_per_hour = $2, dedupe = $3, moderation = $4 WHERE station_id = $5",
     )
     .bind(input.enabled)
     .bind(input.max_per_hour)
@@ -144,11 +151,18 @@ pub async fn update_rules(
 
 /// How many requests were accepted in the rolling hour — the rate-limit
 /// check (pending requests count too, they are still "requested").
-pub async fn count_in_hour(pool: &SqlitePool, station_id: &str) -> Result<i64, ApiError> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM requests
-         WHERE station_id = ? AND status != 'rejected' AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')",
-    )
+pub async fn count_in_hour(pool: &AnyPool, station_id: &str) -> Result<i64, ApiError> {
+    let since = match crate::db::kind() {
+        crate::db::DbKind::Postgres => {
+            "created_at >= to_char(now() - interval '1 hour', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')"
+        }
+        crate::db::DbKind::Sqlite => {
+            "created_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hour')"
+        }
+    };
+    let count: i64 = sqlx::query_scalar(&format!(
+        "SELECT COUNT(*) FROM requests\n         WHERE station_id = $1 AND status != 'rejected' AND {since}",
+    ))
     .bind(station_id)
     .fetch_one(pool)
     .await?;
@@ -157,12 +171,12 @@ pub async fn count_in_hour(pool: &SqlitePool, station_id: &str) -> Result<i64, A
 
 /// True when this media already has a live request (pending or queued).
 pub async fn already_requested(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     media_id: &str,
 ) -> Result<bool, ApiError> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM requests WHERE station_id = ? AND media_id = ? AND status IN ('pending', 'queued')",
+        "SELECT COUNT(*) FROM requests WHERE station_id = $1 AND media_id = $2 AND status IN ('pending', 'queued')",
     )
     .bind(station_id)
     .bind(media_id)
@@ -173,7 +187,7 @@ pub async fn already_requested(
 
 /// Insert a new request; `moderated` controls the initial status.
 pub async fn insert_request(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     media_id: &str,
     requested_by: Option<&str>,
@@ -183,7 +197,7 @@ pub async fn insert_request(
     let ts = now();
     let status = if moderated { "pending" } else { "queued" };
     sqlx::query(
-        "INSERT INTO requests (id, station_id, media_id, requested_by, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO requests (id, station_id, media_id, requested_by, status, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(&id)
     .bind(station_id)
@@ -197,9 +211,9 @@ pub async fn insert_request(
     get_request(pool, &id).await
 }
 
-pub async fn get_request(pool: &SqlitePool, id: &str) -> Result<Request, ApiError> {
+pub async fn get_request(pool: &AnyPool, id: &str) -> Result<Request, ApiError> {
     let row = sqlx::query_as::<_, Request>(
-        "SELECT id, station_id, media_id, requested_by, status, created_at, updated_at FROM requests WHERE id = ?",
+        "SELECT id, station_id, media_id, requested_by, status, created_at, updated_at FROM requests WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -210,7 +224,7 @@ pub async fn get_request(pool: &SqlitePool, id: &str) -> Result<Request, ApiErro
 
 /// Pending (moderation inbox) or recent requests joined with media titles.
 pub async fn list_requests(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     only_pending: bool,
 ) -> Result<Vec<RequestDetail>, ApiError> {
@@ -218,13 +232,13 @@ pub async fn list_requests(
         "SELECT r.id, r.station_id, r.media_id, r.requested_by, r.status, r.created_at, r.updated_at,
                 COALESCE(m.title, m.filename) AS title, COALESCE(m.artist, '') AS artist, m.filename AS filename
          FROM requests r JOIN media_files m ON m.id = r.media_id
-         WHERE r.station_id = ? AND r.status = 'pending'
+         WHERE r.station_id = $1 AND r.status = 'pending'
          ORDER BY r.created_at"
     } else {
         "SELECT r.id, r.station_id, r.media_id, r.requested_by, r.status, r.created_at, r.updated_at,
                 COALESCE(m.title, m.filename) AS title, COALESCE(m.artist, '') AS artist, m.filename AS filename
          FROM requests r JOIN media_files m ON m.id = r.media_id
-         WHERE r.station_id = ?
+         WHERE r.station_id = $1
          ORDER BY r.created_at DESC LIMIT 50"
     };
     let rows = sqlx::query_as::<_, RequestDetailRow>(sql)
@@ -237,8 +251,8 @@ pub async fn list_requests(
     Ok(rows)
 }
 
-pub async fn set_status(pool: &SqlitePool, id: &str, status: &str) -> Result<Request, ApiError> {
-    let affected = sqlx::query("UPDATE requests SET status = ?, updated_at = ? WHERE id = ?")
+pub async fn set_status(pool: &AnyPool, id: &str, status: &str) -> Result<Request, ApiError> {
+    let affected = sqlx::query("UPDATE requests SET status = $1, updated_at = $2 WHERE id = $3")
         .bind(status)
         .bind(now())
         .bind(id)
@@ -253,18 +267,19 @@ pub async fn set_status(pool: &SqlitePool, id: &str, status: &str) -> Result<Req
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::SqlitePool;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::AnyPool;
+    use sqlx::any::AnyPoolOptions;
 
-    async fn test_pool() -> SqlitePool {
-        SqlitePoolOptions::new()
+    async fn test_pool() -> AnyPool {
+        sqlx::any::install_default_drivers();
+        AnyPoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .expect("pool")
     }
 
-    async fn seed(pool: &SqlitePool) -> String {
+    async fn seed(pool: &AnyPool) -> String {
         sqlx::query("CREATE TABLE stations (id TEXT PRIMARY KEY, name TEXT NOT NULL)")
             .execute(pool)
             .await
@@ -318,10 +333,10 @@ mod tests {
             &pool,
             &station,
             &RequestRulesInput {
-                enabled: true,
+                enabled: true.into(),
                 max_per_hour: 5,
-                dedupe: true,
-                moderation: true,
+                dedupe: true.into(),
+                moderation: true.into(),
             },
         )
         .await

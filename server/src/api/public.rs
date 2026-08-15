@@ -63,7 +63,7 @@ async fn now_playing(State(state): State<AppState>) -> ApiResult<Json<Vec<Public
             facebook: station.facebook,
             twitter: station.twitter,
             instagram: station.instagram,
-            requests_enabled: rules.enabled,
+            requests_enabled: rules.enabled.into(),
             stream_url: format!("/api/stations/{}/stream", station.id),
             hls_playlist_url: hls,
             now,
@@ -106,7 +106,7 @@ async fn station_public_inner(
         facebook: station.facebook,
         twitter: station.twitter,
         instagram: station.instagram,
-        requests_enabled: rules.enabled,
+        requests_enabled: rules.enabled.into(),
         stream_url: format!("/api/stations/{station_id}/stream"),
         hls_playlist_url: hls,
         now,
@@ -133,7 +133,7 @@ struct PublicStation {
 }
 
 fn hls_playlist_url(station: &stations::Station) -> Option<String> {
-    if station.hls_enabled && !station.hls_dir.trim().is_empty() {
+    if *station.hls_enabled && !station.hls_dir.trim().is_empty() {
         Some(format!(
             "/api/public/stations/{}/hls/playlist.m3u8",
             station.id

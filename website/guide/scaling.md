@@ -17,9 +17,11 @@ deployment models, what works today, and what unlocks the next tier.
 - **Event bus**: station events (track changes for the SSE dashboards) fan
   out through an in-process hub by default, or through **Redis pub/sub**
   when `CRABCAST_REDIS_URL` is set on every API host.
-- **Database**: the API's single source of truth. **SQLite** today
-  (embedded, zero-ops); a **Postgres** backend is the planned unlock for
-  multi-writer deployments (see below).
+- **Database**: the API's single source of truth. **SQLite** by default
+  (embedded, zero-ops); **Postgres** is fully supported — set
+  `DATABASE_URL` to a `postgres://…` URL and the server runs its
+  Postgres migrations at boot. Multi-writer deployments use Postgres
+  (see below).
 
 ## Deployment models
 
@@ -37,12 +39,12 @@ The web app is stateless, so run as many copies as you like behind a
 reverse proxy. The single API stays the only writer to SQLite. This covers
 traffic spikes without touching the control plane.
 
-### 3. Multiple API hosts (needs Postgres)
+### 3. Multiple API hosts (Postgres)
 
 This is the full horizontal-scale story: **N API hosts, M station hosts,
-one shared database**, with Redis carrying the event bus so every
-dashboard sees every station no matter which host handled the track
-webhook.
+one shared Postgres database**, with Redis carrying the event bus so
+every dashboard sees every station no matter which host handled the
+track webhook.
 
 What's already in place:
 
@@ -55,25 +57,26 @@ What's already in place:
 - **Stateless handlers** — every request is a DB round-trip; there is no
   per-host in-memory state that a second host would miss.
 
-What it still needs before it's safe:
+What it still needs before it's fully safe:
 
-- **Postgres backend** — SQLite is an embedded single-writer database;
-  multiple API processes cannot share one SQLite file reliably. The
-  ROADMAP's Postgres feature flag is the planned dual-driver backend
-  (`sqlx` already supports both). Until it lands, run exactly **one** API
-  host and scale the web tier instead.
-- **Session store** — browser sessions are stored in the API's database,
-  so they are per-host. With Postgres the session store moves into the
-  shared DB automatically; today, a load balancer must pin a user to one
-  API host (sticky sessions) or rely on API tokens.
+- **SQLite remains single-writer** — with `DATABASE_URL` pointing at
+  SQLite, run exactly **one** API host and scale the web tier instead;
+  multiple processes cannot share one SQLite file reliably.
+- **Backup/restore** — the one-click zip backup uses a SQLite file
+  snapshot (`VACUUM INTO`), so it is SQLite-only today; on Postgres the
+  endpoints return a clear error. Use `pg_dump`/`pg_restore` for PG
+  backups (a pg_dump-based backup is a planned follow-up).
 - **Station placement** — station engines live on the API host that
   spawned them, reading the shared media volume. In the M-station-host
   model the engines run on dedicated hosts that can see the media (shared
   NFS volume or replicated media), and the supervisor placement is
   delegated — the engine binary and media must be present on whichever
   host runs a station.
+- **Session store** — browser sessions live in the API's database; with
+  Postgres they are already shared, with SQLite a load balancer must pin
+  a user to one API host (sticky sessions) or rely on API tokens.
 
-## Target topology (once Postgres lands)
+## Target topology (Postgres)
 
 ```
                  ┌──────────────┐
@@ -105,5 +108,6 @@ What it still needs before it's safe:
 2. Add a reverse proxy (Caddy/nginx) in front of web + API, set
    `CRABCAST_SESSION_SECRET` once, and put Redis behind `CRABCAST_REDIS_URL`
    if you run any second API process for read-only tooling.
-3. Watch the ROADMAP for the Postgres backend — it flips the multi-host
-   model from "planned" to "supported".
+3. For multi-host: point every API host at one shared Postgres
+   (`DATABASE_URL=postgres://…`) plus Redis; the boot migrations create
+   the schema automatically.

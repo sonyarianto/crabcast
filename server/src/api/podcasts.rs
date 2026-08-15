@@ -91,7 +91,7 @@ async fn delete(
 ) -> ApiResult<StatusCode> {
     // The episode's station is the scope for the permission check.
     let station_id =
-        sqlx::query_scalar::<_, String>("SELECT station_id FROM podcast_episodes WHERE id = ?")
+        sqlx::query_scalar::<_, String>("SELECT station_id FROM podcast_episodes WHERE id = $1")
             .bind(&episode_id)
             .fetch_optional(&state.pool)
             .await?

@@ -4,13 +4,16 @@
 use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use axum::http::HeaderValue;
 use axum::http::request::Parts;
 use sha2::{Digest, Sha256};
-use sqlx::SqlitePool;
 use tower_cookies::Key;
 use tower_sessions::Session;
+use tower_sessions::SessionStore;
+use tower_sessions::session::{Id, Record};
+use tower_sessions::session_store::Result as StoreResult;
 
 use crate::api::AppState;
 use crate::api::error::{ApiError, ApiResult};
@@ -48,7 +51,7 @@ pub struct CurrentUser {
 
 impl CurrentUser {
     pub fn is_super_admin(&self) -> bool {
-        self.user.is_super_admin
+        self.user.is_super_admin.into()
     }
 
     pub fn has_role(&self, role: &str, station_id: &str) -> bool {
@@ -230,18 +233,54 @@ impl From<UserRow> for User {
 /// Session layer with an encrypted cookie. The key comes from
 /// `CRABCAST_SESSION_SECRET` (any string); when unset a random key is
 /// generated, logging the user out on every restart.
+/// Runtime-selected session store: the concrete store is chosen by the
+/// `DATABASE_URL` scheme at boot, but tower-sessions' layer is generic over
+/// the store type, so both variants sit behind this enum.
+#[derive(Debug, Clone)]
+pub enum SessionStoreAny {
+    Sqlite(tower_sessions_sqlx_store::SqliteStore),
+    Postgres(tower_sessions_sqlx_store::PostgresStore),
+}
+
+#[async_trait]
+impl SessionStore for SessionStoreAny {
+    async fn create(&self, session_record: &mut Record) -> StoreResult<()> {
+        match self {
+            Self::Sqlite(s) => s.create(session_record).await,
+            Self::Postgres(s) => s.create(session_record).await,
+        }
+    }
+
+    async fn save(&self, session_record: &Record) -> StoreResult<()> {
+        match self {
+            Self::Sqlite(s) => s.save(session_record).await,
+            Self::Postgres(s) => s.save(session_record).await,
+        }
+    }
+
+    async fn load(&self, session_id: &Id) -> StoreResult<Option<Record>> {
+        match self {
+            Self::Sqlite(s) => s.load(session_id).await,
+            Self::Postgres(s) => s.load(session_id).await,
+        }
+    }
+
+    async fn delete(&self, session_id: &Id) -> StoreResult<()> {
+        match self {
+            Self::Sqlite(s) => s.delete(session_id).await,
+            Self::Postgres(s) => s.delete(session_id).await,
+        }
+    }
+}
+
 pub fn session_layer(
-    pool: SqlitePool,
+    store: SessionStoreAny,
     key: Key,
-) -> tower_sessions::SessionManagerLayer<
-    tower_sessions_sqlx_store::SqliteStore,
-    tower_sessions::service::PrivateCookie,
-> {
+) -> tower_sessions::SessionManagerLayer<SessionStoreAny, tower_sessions::service::PrivateCookie> {
     use tower_sessions::cookie::SameSite;
     use tower_sessions::{Expiry, SessionManagerLayer};
-    use tower_sessions_sqlx_store::SqliteStore;
 
-    SessionManagerLayer::new(SqliteStore::new(pool))
+    SessionManagerLayer::new(store)
         .with_name("crabcast.session")
         .with_secure(false)
         .with_same_site(SameSite::Lax)
@@ -346,7 +385,7 @@ mod tests {
                 id: "u1".into(),
                 username: "tester".into(),
                 display_name: "Tester".into(),
-                is_super_admin: false,
+                is_super_admin: false.into(),
                 created_at: "now".into(),
             },
             grants,
@@ -356,7 +395,7 @@ mod tests {
     #[test]
     fn super_admin_bypasses_role_checks() {
         let mut u = user(vec![]);
-        u.user.is_super_admin = true;
+        u.user.is_super_admin = true.into();
         assert!(u.can_manage_stations("s1"));
         assert!(u.can_control_station("s1"));
     }

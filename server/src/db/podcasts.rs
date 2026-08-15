@@ -3,8 +3,8 @@
 //! join at request time.
 
 use serde::Serialize;
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::{ApiError, ApiResult};
 use crate::db::now;
@@ -49,7 +49,7 @@ impl EpisodeFeedRow {
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     media_id: &str,
     title: &str,
@@ -58,7 +58,7 @@ pub async fn create(
     let id = uuid::Uuid::new_v4().to_string();
     sqlx::query(
         "INSERT INTO podcast_episodes (id, station_id, media_id, title, description, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(&id)
     .bind(station_id)
@@ -86,14 +86,14 @@ pub async fn create(
     })
 }
 
-pub async fn list(pool: &SqlitePool, station_id: &str) -> sqlx::Result<Vec<EpisodeFeedRow>> {
+pub async fn list(pool: &AnyPool, station_id: &str) -> sqlx::Result<Vec<EpisodeFeedRow>> {
     sqlx::query_as::<_, EpisodeFeedRow>(
         "SELECT e.id, e.station_id, e.media_id, e.title, e.description, e.created_at,
                 m.filename, m.mime, m.size_bytes, COALESCE(m.artist, '') AS artist,
                 COALESCE(m.album, '') AS album
          FROM podcast_episodes e
          JOIN media_files m ON m.id = e.media_id
-         WHERE e.station_id = ?
+         WHERE e.station_id = $1
          ORDER BY e.created_at DESC",
     )
     .bind(station_id)
@@ -101,8 +101,8 @@ pub async fn list(pool: &SqlitePool, station_id: &str) -> sqlx::Result<Vec<Episo
     .await
 }
 
-pub async fn delete(pool: &SqlitePool, episode_id: &str) -> sqlx::Result<bool> {
-    let res = sqlx::query("DELETE FROM podcast_episodes WHERE id = ?")
+pub async fn delete(pool: &AnyPool, episode_id: &str) -> sqlx::Result<bool> {
+    let res = sqlx::query("DELETE FROM podcast_episodes WHERE id = $1")
         .bind(episode_id)
         .execute(pool)
         .await?;

@@ -21,7 +21,7 @@ The roadmap is in [ROADMAP.md](../ROADMAP.md); history in
 
 | Variable | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `DATABASE_URL` | yes | — | SQLite path, e.g. `sqlite:/data/crabcast.db` |
+| `DATABASE_URL` | yes | — | SQLite path (`sqlite:/data/crabcast.db`, default) **or** a `postgres://…` URL — the scheme picks the backend at boot |
 | `BIND_ADDR` | no | `127.0.0.1:8080` | API listen address |
 | `CRABCAST_DATA_DIR` | yes | — | Station configs/logs (`configs/<id>/`, `logs/<id>.log`) |
 | `CRABCAST_MEDIA_DIR` | yes | — | Media library root |
@@ -57,6 +57,8 @@ Two supported paths (details in `packaging/README.md` and
 ## 5. Verification checklist
 
 - [ ] `GET /api/health` returns `{"status":"ok","db":"ok"}`.
+- [ ] (Postgres) Boot once with `DATABASE_URL=postgres://…`; migrations
+      apply and login works end-to-end.
 - [ ] First boot shows the bootstrap screen; create the super admin.
 - [ ] Upload audio → it appears in the Library with tags + cover art.
 - [ ] Create a station → engine spawns (`GET /api/stations/{id}` status
@@ -75,8 +77,12 @@ Two supported paths (details in `packaging/README.md` and
 
 ## 6. Known limitations (post-1.0 roadmap)
 
-- **SQLite is single-writer** — run one API host per database; multi-host
-  wants the Postgres backend (deferred).
+- **SQLite is single-writer** — with a SQLite `DATABASE_URL`, run one API
+  host per database. Postgres is fully supported (`postgres://…` URL);
+  multi-host deployments use it.
+- **Backup/restore is SQLite-only** — the one-click zip uses a SQLite
+  snapshot (`VACUUM INTO`); on Postgres the endpoints return a clear
+  error (use `pg_dump`/`pg_restore` until a pg_dump-based backup lands).
 - **Icecast is required** for the classic mount stream (built-in mount
   server is the last Phase 11 stretch).
 - HLS is standard (6s segments), not LL-HLS yet.

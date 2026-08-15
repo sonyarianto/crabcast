@@ -2,8 +2,8 @@
 //! with its own Icecast source-protocol password.
 
 use serde::{Deserialize, Serialize};
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 use crate::db::now;
@@ -15,7 +15,7 @@ pub struct Streamer {
     pub name: String,
     pub description: String,
     pub source_password: String,
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -30,20 +30,17 @@ pub struct StreamerInput {
     #[serde(default)]
     pub source_password: String,
     #[serde(default = "default_true")]
-    pub enabled: bool,
+    pub enabled: crate::db::DbBool,
 }
 
-fn default_true() -> bool {
-    true
+fn default_true() -> crate::db::DbBool {
+    crate::db::DbBool(true)
 }
 
-pub async fn list_for_station(
-    pool: &SqlitePool,
-    station_id: &str,
-) -> Result<Vec<Streamer>, ApiError> {
+pub async fn list_for_station(pool: &AnyPool, station_id: &str) -> Result<Vec<Streamer>, ApiError> {
     let rows = sqlx::query_as::<_, Streamer>(
         "SELECT id, station_id, name, description, source_password, enabled, created_at, updated_at
-         FROM streamers WHERE station_id = ? ORDER BY name",
+         FROM streamers WHERE station_id = $1 ORDER BY name",
     )
     .bind(station_id)
     .fetch_all(pool)
@@ -51,10 +48,10 @@ pub async fn list_for_station(
     Ok(rows)
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<Streamer, ApiError> {
+pub async fn get(pool: &AnyPool, id: &str) -> Result<Streamer, ApiError> {
     let row = sqlx::query_as::<_, Streamer>(
         "SELECT id, station_id, name, description, source_password, enabled, created_at, updated_at
-         FROM streamers WHERE id = ?",
+         FROM streamers WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -65,14 +62,14 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<Streamer, ApiError> {
 
 /// Source passwords of enabled streamers — the `extra_passwords` for the
 /// station's `input.harbor` (newer, non-empty passwords win on duplicate).
-pub async fn enabled_passwords(
-    pool: &SqlitePool,
-    station_id: &str,
-) -> Result<Vec<String>, ApiError> {
-    let rows: Vec<String> = sqlx::query_scalar(
-        "SELECT source_password FROM streamers
-         WHERE station_id = ? AND enabled = 1 AND source_password != ''",
-    )
+pub async fn enabled_passwords(pool: &AnyPool, station_id: &str) -> Result<Vec<String>, ApiError> {
+    let enabled_true = match crate::db::kind() {
+        crate::db::DbKind::Postgres => "enabled = TRUE",
+        crate::db::DbKind::Sqlite => "enabled = 1",
+    };
+    let rows: Vec<String> = sqlx::query_scalar(&format!(
+        "SELECT source_password FROM streamers\n         WHERE station_id = $1 AND {enabled_true} AND source_password != ''",
+    ))
     .bind(station_id)
     .fetch_all(pool)
     .await?;
@@ -80,7 +77,7 @@ pub async fn enabled_passwords(
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     station_id: &str,
     input: &StreamerInput,
 ) -> Result<Streamer, ApiError> {
@@ -92,7 +89,7 @@ pub async fn create(
     let ts = now();
     sqlx::query(
         "INSERT INTO streamers (id, station_id, name, description, source_password, enabled, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
     )
     .bind(&id)
     .bind(station_id)
@@ -107,11 +104,7 @@ pub async fn create(
     get(pool, &id).await
 }
 
-pub async fn update(
-    pool: &SqlitePool,
-    id: &str,
-    input: &StreamerInput,
-) -> Result<Streamer, ApiError> {
+pub async fn update(pool: &AnyPool, id: &str, input: &StreamerInput) -> Result<Streamer, ApiError> {
     validate(input)?;
     let existing = get(pool, id).await?;
     let password = if input.source_password.trim().is_empty() {
@@ -120,8 +113,8 @@ pub async fn update(
         input.source_password.trim().to_string()
     };
     sqlx::query(
-        "UPDATE streamers SET name = ?, description = ?, source_password = ?, enabled = ?, updated_at = ?
-         WHERE id = ?",
+        "UPDATE streamers SET name = $1, description = $2, source_password = $3, enabled = $4, updated_at = $5
+         WHERE id = $6",
     )
     .bind(input.name.trim())
     .bind(input.description.trim())
@@ -134,8 +127,8 @@ pub async fn update(
     get(pool, id).await
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<(), ApiError> {
-    let affected = sqlx::query("DELETE FROM streamers WHERE id = ?")
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<(), ApiError> {
+    let affected = sqlx::query("DELETE FROM streamers WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -160,20 +153,21 @@ fn validate(input: &StreamerInput) -> Result<(), ApiError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::SqlitePool;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use sqlx::AnyPool;
+    use sqlx::any::AnyPoolOptions;
 
-    async fn test_pool() -> SqlitePool {
+    async fn test_pool() -> AnyPool {
+        sqlx::any::install_default_drivers();
         // In-memory SQLite is per-connection; pin the pool to one connection
         // so every query sees the same database.
-        SqlitePoolOptions::new()
+        AnyPoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await
             .expect("pool")
     }
 
-    async fn seed(pool: &SqlitePool) -> String {
+    async fn seed(pool: &AnyPool) -> String {
         sqlx::query("CREATE TABLE stations (id TEXT PRIMARY KEY, name TEXT NOT NULL)")
             .execute(pool)
             .await
@@ -199,7 +193,7 @@ mod tests {
                 name: "DJ Sarah".into(),
                 description: "evenings".into(),
                 source_password: "sarah-secret".into(),
-                enabled: true,
+                enabled: true.into(),
             },
         )
         .await
@@ -219,7 +213,7 @@ mod tests {
                 name: "DJ Sarah".into(),
                 description: "evenings".into(),
                 source_password: "sarah-new".into(),
-                enabled: true,
+                enabled: true.into(),
             },
         )
         .await
@@ -237,7 +231,7 @@ mod tests {
                 name: "DJ Sarah".into(),
                 description: "evenings".into(),
                 source_password: String::new(),
-                enabled: false,
+                enabled: false.into(),
             },
         )
         .await
@@ -260,7 +254,7 @@ mod tests {
             name: "  ".into(),
             description: String::new(),
             source_password: "pw".into(),
-            enabled: true,
+            enabled: true.into(),
         };
         assert!(create(&pool, &station, &bad).await.is_err());
     }

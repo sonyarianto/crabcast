@@ -54,7 +54,7 @@ async fn revoke_token(
 ) -> ApiResult<StatusCode> {
     let revoked = if user.is_super_admin() {
         // Super admins can revoke any token.
-        sqlx::query("UPDATE api_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
+        sqlx::query("UPDATE api_tokens SET revoked_at = $1 WHERE id = $2 AND revoked_at IS NULL")
             .bind(crate::db::now())
             .bind(&id)
             .execute(&state.pool)

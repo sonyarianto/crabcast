@@ -1,8 +1,8 @@
 //! User, role and audit-log repositories (Phase 2 auth).
 
 use serde::{Deserialize, Serialize};
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 pub const ROLE_STATION_MANAGER: &str = "station_manager";
 pub const ROLE_DJ: &str = "dj";
@@ -15,7 +15,7 @@ pub struct UserRow {
     pub username: String,
     pub password_hash: String,
     pub display_name: String,
-    pub is_super_admin: bool,
+    pub is_super_admin: crate::db::DbBool,
     pub created_at: String,
 }
 
@@ -26,7 +26,7 @@ pub struct User {
     pub id: String,
     pub username: String,
     pub display_name: String,
-    pub is_super_admin: bool,
+    pub is_super_admin: crate::db::DbBool,
     pub created_at: String,
 }
 
@@ -54,7 +54,7 @@ pub struct AuditEntry {
     pub created_at: String,
 }
 
-pub async fn count(pool: &SqlitePool) -> sqlx::Result<i64> {
+pub async fn count(pool: &AnyPool) -> sqlx::Result<i64> {
     let row = sqlx::query_scalar::<_, i64>("select count(*) from users")
         .fetch_one(pool)
         .await?;
@@ -62,7 +62,7 @@ pub async fn count(pool: &SqlitePool) -> sqlx::Result<i64> {
 }
 
 pub async fn create(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     username: &str,
     password_hash: &str,
@@ -72,7 +72,7 @@ pub async fn create(
     let now = crate::db::now();
     sqlx::query(
         "insert into users (id, username, password_hash, display_name, is_super_admin, created_at, updated_at)
-         values (?, ?, ?, ?, ?, ?, ?)",
+         values ($1, $2, $3, $4, $5, $6, $7)",
     )
     .bind(id)
     .bind(username)
@@ -87,28 +87,28 @@ pub async fn create(
         id: id.to_string(),
         username: username.to_string(),
         display_name: display_name.to_string(),
-        is_super_admin,
+        is_super_admin: is_super_admin.into(),
         created_at: now,
     })
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> sqlx::Result<Option<UserRow>> {
-    sqlx::query_as::<_, UserRow>(&format!("select {USER_COLUMNS} from users where id = ?"))
+pub async fn get(pool: &AnyPool, id: &str) -> sqlx::Result<Option<UserRow>> {
+    sqlx::query_as::<_, UserRow>(&format!("select {USER_COLUMNS} from users where id = $1"))
         .bind(id)
         .fetch_optional(pool)
         .await
 }
 
-pub async fn get_by_username(pool: &SqlitePool, username: &str) -> sqlx::Result<Option<UserRow>> {
+pub async fn get_by_username(pool: &AnyPool, username: &str) -> sqlx::Result<Option<UserRow>> {
     sqlx::query_as::<_, UserRow>(&format!(
-        "select {USER_COLUMNS} from users where username = ?"
+        "select {USER_COLUMNS} from users where username = $1"
     ))
     .bind(username)
     .fetch_optional(pool)
     .await
 }
 
-pub async fn list(pool: &SqlitePool) -> sqlx::Result<Vec<UserWithRoles>> {
+pub async fn list(pool: &AnyPool) -> sqlx::Result<Vec<UserWithRoles>> {
     let rows = sqlx::query_as::<_, UserRow>(&format!(
         "select {USER_COLUMNS} from users order by created_at"
     ))
@@ -126,13 +126,13 @@ pub async fn list(pool: &SqlitePool) -> sqlx::Result<Vec<UserWithRoles>> {
 }
 
 pub async fn update(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     display_name: &str,
     is_super_admin: bool,
 ) -> sqlx::Result<()> {
     sqlx::query(
-        "update users set display_name = ?, is_super_admin = ?, updated_at = ? where id = ?",
+        "update users set display_name = $1, is_super_admin = $2, updated_at = $3 where id = $4",
     )
     .bind(display_name)
     .bind(is_super_admin)
@@ -143,8 +143,8 @@ pub async fn update(
     Ok(())
 }
 
-pub async fn set_password(pool: &SqlitePool, id: &str, password_hash: &str) -> sqlx::Result<()> {
-    sqlx::query("update users set password_hash = ?, updated_at = ? where id = ?")
+pub async fn set_password(pool: &AnyPool, id: &str, password_hash: &str) -> sqlx::Result<()> {
+    sqlx::query("update users set password_hash = $1, updated_at = $2 where id = $3")
         .bind(password_hash)
         .bind(crate::db::now())
         .bind(id)
@@ -153,8 +153,8 @@ pub async fn set_password(pool: &SqlitePool, id: &str, password_hash: &str) -> s
     Ok(())
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> sqlx::Result<()> {
-    sqlx::query("delete from users where id = ?")
+pub async fn delete(pool: &AnyPool, id: &str) -> sqlx::Result<()> {
+    sqlx::query("delete from users where id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -174,19 +174,15 @@ impl UserRow {
 }
 
 /// Replace a user's role grants; existing grants for other scopes are kept.
-pub async fn set_grants(
-    pool: &SqlitePool,
-    user_id: &str,
-    grants: &[RoleGrant],
-) -> sqlx::Result<()> {
-    sqlx::query("delete from user_roles where user_id = ?")
+pub async fn set_grants(pool: &AnyPool, user_id: &str, grants: &[RoleGrant]) -> sqlx::Result<()> {
+    sqlx::query("delete from user_roles where user_id = $1")
         .bind(user_id)
         .execute(pool)
         .await?;
     for g in grants {
         sqlx::query(
             "insert into user_roles (user_id, role_id, station_id)
-             select ?, id, ? from roles where name = ?",
+             select $1, id, $2 from roles where name = $3",
         )
         .bind(user_id)
         .bind(&g.station_id)
@@ -197,10 +193,10 @@ pub async fn set_grants(
     Ok(())
 }
 
-pub async fn grants_for(pool: &SqlitePool, user_id: &str) -> sqlx::Result<Vec<RoleGrant>> {
+pub async fn grants_for(pool: &AnyPool, user_id: &str) -> sqlx::Result<Vec<RoleGrant>> {
     sqlx::query_as::<_, (String, Option<String>)>(
         "select r.name, ur.station_id from user_roles ur
-         join roles r on r.id = ur.role_id where ur.user_id = ?",
+         join roles r on r.id = ur.role_id where ur.user_id = $1",
     )
     .bind(user_id)
     .fetch_all(pool)
@@ -220,13 +216,13 @@ pub fn has_role(grants: &[RoleGrant], role: &str, station_id: &str) -> bool {
 }
 
 pub async fn log_audit(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     user_id: Option<&str>,
     action: &str,
     target: &str,
     detail: &str,
 ) -> sqlx::Result<()> {
-    sqlx::query("insert into audit_log (user_id, action, target, detail, created_at) values (?, ?, ?, ?, ?)")
+    sqlx::query("insert into audit_log (user_id, action, target, detail, created_at) values ($1, $2, $3, $4, $5)")
         .bind(user_id)
         .bind(action)
         .bind(target)
@@ -237,8 +233,8 @@ pub async fn log_audit(
     Ok(())
 }
 
-pub async fn list_audit(pool: &SqlitePool, limit: i64) -> sqlx::Result<Vec<AuditEntry>> {
-    sqlx::query_as::<_, AuditEntry>("select * from audit_log order by id desc limit ?")
+pub async fn list_audit(pool: &AnyPool, limit: i64) -> sqlx::Result<Vec<AuditEntry>> {
+    sqlx::query_as::<_, AuditEntry>("select * from audit_log order by id desc limit $1")
         .bind(limit)
         .fetch_all(pool)
         .await

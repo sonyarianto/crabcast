@@ -40,7 +40,7 @@ fn fake_stations(count: usize) -> Vec<Station> {
             icecast_bitrate: 128000,
             icecast_source_user: "source".into(),
             icecast_source_password: "hackme".into(),
-            hls_enabled: false,
+            hls_enabled: false.into(),
             hls_dir: String::new(),
             hls_segment_seconds: 5.0,
             hls_retention: 12,
@@ -101,7 +101,7 @@ fn bench_listener_series(c: &mut Criterion) {
         .build()
         .expect("runtime");
     let pool = rt.block_on(async {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        let pool = sqlx::any::AnyPoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
             .await

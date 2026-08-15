@@ -19,7 +19,7 @@ pub mod webhooks;
 use std::sync::Arc;
 
 use axum::Router;
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::api::error::ApiError;
 use crate::api::sse::SseHub;
@@ -29,13 +29,13 @@ use crate::stations::supervisor::Supervisor;
 /// Shared app state for every route module.
 #[derive(Clone)]
 pub struct AppState {
-    pub pool: SqlitePool,
+    pub pool: AnyPool,
     pub supervisor: Supervisor,
     pub hub: Arc<SseHub>,
     pub storage: Arc<dyn Storage>,
 }
 
-pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage>) -> Router {
+pub fn router(pool: AnyPool, supervisor: Supervisor, storage: Arc<dyn Storage>) -> Router {
     let state = AppState {
         pool,
         supervisor,

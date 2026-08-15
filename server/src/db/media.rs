@@ -1,8 +1,8 @@
 //! Media library repository (Phase 3).
 
 use serde::Serialize;
+use sqlx::AnyPool;
 use sqlx::FromRow;
-use sqlx::SqlitePool;
 
 use crate::api::error::ApiError;
 
@@ -51,7 +51,7 @@ pub struct MediaFile {
     pub bitrate: Option<i64>,
     pub replaygain_track_gain: Option<f64>,
     pub replaygain_album_gain: Option<f64>,
-    pub has_cover: bool,
+    pub has_cover: crate::db::DbBool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waveform: Option<Vec<f64>>,
     pub created_at: String,
@@ -76,7 +76,7 @@ impl MediaRow {
             bitrate: self.bitrate,
             replaygain_track_gain: self.replaygain_track_gain,
             replaygain_album_gain: self.replaygain_album_gain,
-            has_cover: self.cover_path.is_some(),
+            has_cover: self.cover_path.is_some().into(),
             waveform: if include_waveform {
                 serde_json::from_str(&self.waveform).ok()
             } else {
@@ -105,13 +105,13 @@ pub struct InsertMedia<'a> {
     pub cover_mime: Option<&'a str>,
 }
 
-pub async fn insert(pool: &SqlitePool, m: &InsertMedia<'_>) -> Result<MediaRow, ApiError> {
+pub async fn insert(pool: &AnyPool, m: &InsertMedia<'_>) -> Result<MediaRow, ApiError> {
     let now = crate::db::now();
     sqlx::query(
         "INSERT INTO media_files (id, sha256, filename, mime, size_bytes, storage_path, \
 title, artist, album, genre, duration_seconds, sample_rate, channels, bitrate, \
 replaygain_track_gain, replaygain_album_gain, cover_path, cover_mime, waveform, created_at, updated_at) \
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
     )
     .bind(m.id)
     .bind(m.sha256)
@@ -141,7 +141,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         .ok_or_else(|| ApiError::not_found("media file", m.id))
 }
 
-pub async fn get(pool: &SqlitePool, id: &str) -> Result<MediaFile, ApiError> {
+pub async fn get(pool: &AnyPool, id: &str) -> Result<MediaFile, ApiError> {
     row(pool, "id", id)
         .await?
         .map(|r| r.into_file(true))
@@ -149,17 +149,17 @@ pub async fn get(pool: &SqlitePool, id: &str) -> Result<MediaFile, ApiError> {
 }
 
 /// The id of the file already stored under `sha256`, if any (dedupe).
-pub async fn find_by_sha256(pool: &SqlitePool, sha256: &str) -> Result<Option<String>, ApiError> {
-    let id: Option<String> = sqlx::query_scalar("SELECT id FROM media_files WHERE sha256 = ?")
+pub async fn find_by_sha256(pool: &AnyPool, sha256: &str) -> Result<Option<String>, ApiError> {
+    let id: Option<String> = sqlx::query_scalar("SELECT id FROM media_files WHERE sha256 = $1")
         .bind(sha256)
         .fetch_optional(pool)
         .await?;
     Ok(id)
 }
 
-async fn row(pool: &SqlitePool, key: &str, value: &str) -> Result<Option<MediaRow>, ApiError> {
+async fn row(pool: &AnyPool, key: &str, value: &str) -> Result<Option<MediaRow>, ApiError> {
     sqlx::query_as::<_, MediaRow>(&format!(
-        "SELECT {COLUMNS} FROM media_files WHERE {key} = ?"
+        "SELECT {COLUMNS} FROM media_files WHERE {key} = $1"
     ))
     .bind(value)
     .fetch_optional(pool)
@@ -168,7 +168,7 @@ async fn row(pool: &SqlitePool, key: &str, value: &str) -> Result<Option<MediaRo
 }
 
 /// Fetch a row including its storage paths (for file deletion).
-pub async fn row_by_id(pool: &SqlitePool, id: &str) -> Result<Option<MediaRow>, ApiError> {
+pub async fn row_by_id(pool: &AnyPool, id: &str) -> Result<Option<MediaRow>, ApiError> {
     row(pool, "id", id).await
 }
 
@@ -186,16 +186,24 @@ pub struct ListQuery<'a> {
     pub offset: i64,
 }
 
-pub async fn list(pool: &SqlitePool, q: &ListQuery<'_>) -> Result<(Vec<MediaFile>, i64), ApiError> {
+pub async fn list(pool: &AnyPool, q: &ListQuery<'_>) -> Result<(Vec<MediaFile>, i64), ApiError> {
+    // WHERE fragments are assembled dynamically; a running counter keeps the
+    // `$N` placeholders numbered in bind order on both backends.
     let mut where_sql = String::new();
     let mut binds: Vec<String> = Vec::new();
+    let mut param = 1;
 
     if let Some(q) = q.q.filter(|q| !q.trim().is_empty()) {
         let like = format!("%{}%", q.trim().replace('%', "\\%").replace('_', "\\_"));
-        where_sql.push_str(
-            " WHERE (title LIKE ? ESCAPE '\\' OR artist LIKE ? ESCAPE '\\' OR \
-album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
-        );
+        where_sql.push_str(&format!(
+            " WHERE (title LIKE ${} ESCAPE '\\' OR artist LIKE ${} ESCAPE '\\' OR \
+album LIKE ${} ESCAPE '\\' OR filename LIKE ${} ESCAPE '\\')",
+            param,
+            param + 1,
+            param + 2,
+            param + 3,
+        ));
+        param += 4;
         for _ in 0..4 {
             binds.push(like.clone());
         }
@@ -206,7 +214,8 @@ album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
         } else {
             " AND"
         });
-        where_sql.push_str(" artist = ?");
+        where_sql.push_str(&format!(" artist = ${param}"));
+        param += 1;
         binds.push(artist.to_string());
     }
     if let Some(album) = q.album.filter(|a| !a.is_empty()) {
@@ -215,7 +224,8 @@ album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
         } else {
             " AND"
         });
-        where_sql.push_str(" album = ?");
+        where_sql.push_str(&format!(" album = ${param}"));
+        param += 1;
         binds.push(album.to_string());
     }
     if let Some(genre) = q.genre.filter(|g| !g.is_empty()) {
@@ -224,7 +234,8 @@ album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
         } else {
             " AND"
         });
-        where_sql.push_str(" genre = ?");
+        where_sql.push_str(&format!(" genre = ${param}"));
+        param += 1;
         binds.push(genre.to_string());
     }
 
@@ -253,7 +264,9 @@ album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
     };
 
     let sql = format!(
-        "SELECT {COLUMNS} FROM media_files{where_sql} ORDER BY {sort_col} {order}, id DESC LIMIT ? OFFSET ?"
+        "SELECT {COLUMNS} FROM media_files{where_sql} ORDER BY {sort_col} {order}, id DESC \
+LIMIT ${param} OFFSET ${}",
+        param + 1,
     );
     let mut query = sqlx::query_as::<_, MediaRow>(&sql);
     for b in &binds {
@@ -263,11 +276,8 @@ album LIKE ? ESCAPE '\\' OR filename LIKE ? ESCAPE '\\')",
     let items = rows.into_iter().map(|r| r.into_file(false)).collect();
     Ok((items, total))
 }
-
 /// Distinct artists/albums/genres for filter dropdowns.
-pub async fn facets(
-    pool: &SqlitePool,
-) -> Result<(Vec<String>, Vec<String>, Vec<String>), ApiError> {
+pub async fn facets(pool: &AnyPool) -> Result<(Vec<String>, Vec<String>, Vec<String>), ApiError> {
     let artists: Vec<String> = sqlx::query_scalar(
         "SELECT DISTINCT artist FROM media_files WHERE artist != '' ORDER BY artist",
     )
@@ -287,17 +297,18 @@ pub async fn facets(
 }
 
 pub async fn update_tags(
-    pool: &SqlitePool,
+    pool: &AnyPool,
     id: &str,
     title: &str,
     artist: &str,
     album: &str,
     genre: &str,
 ) -> Result<MediaFile, ApiError> {
-    let affected = sqlx::query(
-        "UPDATE media_files SET title = ?, artist = ?, album = ?, genre = ?, \
-updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
-    )
+    let affected = sqlx::query(&format!(
+        "UPDATE media_files SET title = $1, artist = $2, album = $3, genre = $4, \
+updated_at = {} WHERE id = $5",
+        crate::db::now_sql(),
+    ))
     .bind(title)
     .bind(artist)
     .bind(album)
@@ -311,12 +322,12 @@ updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     get(pool, id).await
 }
 
-pub async fn delete(pool: &SqlitePool, id: &str) -> Result<Option<MediaRow>, ApiError> {
+pub async fn delete(pool: &AnyPool, id: &str) -> Result<Option<MediaRow>, ApiError> {
     let row = row_by_id(pool, id).await?;
     if row.is_none() {
         return Ok(None);
     }
-    sqlx::query("DELETE FROM media_files WHERE id = ?")
+    sqlx::query("DELETE FROM media_files WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -329,18 +340,16 @@ mod tests {
 
     /// In-memory pool with migrations applied, so repository behavior is
     /// tested against the real schema.
-    async fn test_pool() -> SqlitePool {
+    async fn test_pool() -> AnyPool {
+        sqlx::any::install_default_drivers();
         let _ = tracing_subscriber::fmt()
             .with_env_filter("crabcast_server=debug")
             .try_init();
         // A single connection: in-memory SQLite is per-connection, so a
         // multi-connection pool would scatter tables across databases.
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(":memory:")
-            .create_if_missing(true);
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        let pool = sqlx::any::AnyPoolOptions::new()
             .max_connections(1)
-            .connect_with(options)
+            .connect("sqlite::memory:")
             .await
             .unwrap();
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
@@ -364,12 +373,7 @@ mod tests {
         }
     }
 
-    async fn insert_sample(
-        pool: &SqlitePool,
-        id: &str,
-        sha: &str,
-        scan: &crate::media::ScanResult,
-    ) {
+    async fn insert_sample(pool: &AnyPool, id: &str, sha: &str, scan: &crate::media::ScanResult) {
         insert(
             pool,
             &InsertMedia {

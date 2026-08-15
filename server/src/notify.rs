@@ -7,7 +7,7 @@
 //! The alert webhook (`CRABCAST_ALERT_WEBHOOK_URL`) remains the separate,
 //! env-configured crash-alert channel from Phase 4.
 
-use sqlx::SqlitePool;
+use sqlx::AnyPool;
 
 use crate::db::notification_webhooks;
 
@@ -24,7 +24,7 @@ fn message_for(event: &str, station_name: &str) -> String {
 
 /// Fire an event for a station: look up subscribed webhooks and POST to
 /// each with a 5s timeout. Errors are logged, never propagated.
-pub async fn station_event(pool: &SqlitePool, station_id: &str, event: &str) {
+pub async fn station_event(pool: &AnyPool, station_id: &str, event: &str) {
     let station_name = match crate::db::stations::get(pool, station_id).await {
         Ok(s) => s.name,
         Err(_) => station_id.to_string(),

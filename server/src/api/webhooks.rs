@@ -69,7 +69,7 @@ async fn create(
         &WebhookInput {
             url: input.url,
             events: input.events,
-            enabled: input.enabled,
+            enabled: input.enabled.into(),
         },
     )
     .await?;
@@ -92,7 +92,7 @@ async fn delete(
 ) -> ApiResult<StatusCode> {
     // The webhook's station is the scope for the permission check.
     let station_id = sqlx::query_scalar::<_, String>(
-        "SELECT station_id FROM notification_webhooks WHERE id = ?",
+        "SELECT station_id FROM notification_webhooks WHERE id = $1",
     )
     .bind(&webhook_id)
     .fetch_optional(&state.pool)

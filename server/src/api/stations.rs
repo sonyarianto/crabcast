@@ -119,7 +119,7 @@ async fn update_station(
 /// `--check` rejects `output.hls` without one, so fail early instead of
 /// leaving the station in a broken config.
 fn validate_hls(input: &StationInput) -> ApiResult<()> {
-    if input.hls_enabled && input.hls_dir.trim().is_empty() {
+    if *input.hls_enabled && input.hls_dir.trim().is_empty() {
         return Err(ApiError::bad_request(
             "hls_dir is required when HLS is enabled",
         ));
