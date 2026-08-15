@@ -316,7 +316,7 @@ install script; backup → restore verified in CI.
 
 - [x] Podcasts (AzuraCast parity): upload episodes, feed generation.
 - [ ] HLS streaming (low-latency) as an alternative to raw mounts.
-- [ ] PWA admin + mobile remote control.
+- [x] PWA admin + mobile remote control.
 - [ ] i18n: full translation pass (next-intl), RTL support.
 - [ ] Built-in mount server (skip Icecast) — only after Phase 8/9 listener
       metrics justify the engine work; this is the biggest lever for the
@@ -598,6 +598,24 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   generator emitted `jingles({})` for stations without a jingles dir,
   which the engine rejects at `--check` (the jingle source is now omitted
   from the chain instead).
+
+- **Phase 11 — PWA admin + mobile remote control** (2026-08-15): the web
+  app is now installable — `app/manifest.ts` (name/theme `#7c3aed`,
+  standalone display, 192/512 + maskable icons), PNG icons generated with
+  ffmpeg from the site's purple/white radio-note mark (glyph pixel-
+  verified), `public/sw.js` (app-shell offline: network-first
+  navigations with cached fallback, cache-first static assets with
+  background refresh, `/api/*` never cached, versioned cache + cleanup,
+  `skipWaiting`/`clients.claim`), and a `PwaRegister` component that
+  registers the worker in production only (dev HMR untouched).
+  `layout.tsx` gained `themeColor`, `appleWebApp` (capable,
+  black-translucent), and the apple-touch icon. The admin UI is
+  responsive and touch-friendly, so the installable app doubles as a
+  phone remote control for station commands. Verified: production build
+  emits `/manifest.webmanifest`; the standalone output (assembled exactly
+  as the Dockerfile does: standalone + static + public) serves
+  `sw.js`, both icons, the maskable + apple icons, the manifest and the
+  app shell all HTTP 200.
 
 - **Phase 11 — Podcasts (AzuraCast parity)** (2026-08-15): migration
   `0012_podcast_episodes` (episodes reference media-library files,
