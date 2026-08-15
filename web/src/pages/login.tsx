@@ -3,7 +3,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +22,7 @@ import { bootstrapAdmin, fetchMe, login } from "@/lib/api";
 type Mode = "checking" | "login" | "bootstrap";
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("checking");
   const [busy, setBusy] = useState(false);
@@ -45,7 +48,7 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (mode === "bootstrap") {
-        if (password !== confirm) throw new Error("Passwords do not match");
+        if (password !== confirm) throw new Error(t("login.passwords_mismatch"));
         await bootstrapAdmin({
           username,
           password,
@@ -55,15 +58,16 @@ export default function LoginPage() {
         await login({ username, password });
       }
       toast.add({
-        title: mode === "bootstrap" ? "Admin created" : "Signed in",
+        title:
+          mode === "bootstrap" ? t("login.admin_created") : t("login.signed_in"),
         type: "success",
         timeout: 3000,
       });
       navigate("/welcome", { replace: true });
     } catch (err) {
       toast.add({
-        title: "Sign-in failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("login.signin_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -77,32 +81,37 @@ export default function LoginPage() {
       <header className="flex h-14 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2 font-semibold">
           <Radio className="size-5" />
-          Crabcast
+          {t("app.name")}
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 py-16">
         {mode === "checking" && (
-          <p className="text-sm text-muted-foreground">Checking…</p>
+          <p className="text-sm text-muted-foreground">{t("login.checking")}</p>
         )}
         {mode !== "checking" && (
           <Card>
             <CardHeader>
               <CardTitle>
-                {mode === "bootstrap" ? "Create the first admin" : "Sign in"}
+                {mode === "bootstrap"
+                  ? t("login.create_first_admin")
+                  : t("login.signin")}
               </CardTitle>
               <CardDescription>
                 {mode === "bootstrap"
-                  ? "No users exist yet. This account gets super-admin rights."
-                  : "Use your Crabcast username and password."}
+                  ? t("login.bootstrap_hint")
+                  : t("login.use_credentials")}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={submit} className="grid gap-4">
                 {mode === "bootstrap" && (
                   <div className="grid gap-2">
-                    <Label htmlFor="display_name">Display name</Label>
+                    <Label htmlFor="display_name">{t("login.display_name")}</Label>
                     <input
                       id="display_name"
                       value={displayName}
@@ -112,7 +121,7 @@ export default function LoginPage() {
                   </div>
                 )}
                 <div className="grid gap-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">{t("login.username")}</Label>
                   <input
                     id="username"
                     autoComplete="username"
@@ -122,7 +131,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("login.password")}</Label>
                   <input
                     id="password"
                     type="password"
@@ -136,7 +145,7 @@ export default function LoginPage() {
                 </div>
                 {mode === "bootstrap" && (
                   <div className="grid gap-2">
-                    <Label htmlFor="confirm">Confirm password</Label>
+                    <Label htmlFor="confirm">{t("login.confirm_password")}</Label>
                     <input
                       id="confirm"
                       type="password"
@@ -149,10 +158,10 @@ export default function LoginPage() {
                 )}
                 <Button type="submit" disabled={busy}>
                   {busy
-                    ? "Please wait…"
+                    ? t("common.please_wait")
                     : mode === "bootstrap"
-                      ? "Create admin"
-                      : "Sign in"}
+                      ? t("login.create_admin")
+                      : t("login.signin")}
                 </Button>
               </form>
             </CardContent>

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Radio, UsersIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,14 +48,23 @@ type Status =
 const ROLES = [
   {
     name: "station_manager",
-    label: "Station manager",
-    hint: "manage stations",
+    labelKey: "users.role_station_manager",
+    hintKey: "users.role_station_manager_hint",
   },
-  { name: "dj", label: "DJ", hint: "live control: skip, jingles" },
-  { name: "media_editor", label: "Media editor", hint: "edit media (Phase 4)" },
+  {
+    name: "dj",
+    labelKey: "users.role_dj",
+    hintKey: "users.role_dj_hint",
+  },
+  {
+    name: "media_editor",
+    labelKey: "users.role_media_editor",
+    hintKey: "users.role_media_editor_hint",
+  },
 ] as const;
 
 export default function UsersPage() {
+  const { t } = useTranslation();
   const { meState } = useMe();
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [stations, setStations] = useState<Station[]>([]);
@@ -71,10 +82,10 @@ export default function UsersPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     Promise.all([listUsers(), listAudit()])
@@ -82,13 +93,13 @@ export default function UsersPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
     listStations()
       .then(setStations)
       .catch(() => setStations([]));
-  }, []);
+  }, [t]);
 
   const canAdmin = meState.state === "ready" && meState.me.user.is_super_admin;
 
@@ -114,7 +125,7 @@ export default function UsersPage() {
         is_super_admin: isSuperAdmin,
         roles: grants,
       });
-      toast.add({ title: "User created", type: "success", timeout: 3000 });
+      toast.add({ title: t("users.created"), type: "success", timeout: 3000 });
       setUsername("");
       setDisplayName("");
       setPassword("");
@@ -123,8 +134,8 @@ export default function UsersPage() {
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to create user",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("users.create_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -134,15 +145,15 @@ export default function UsersPage() {
   };
 
   const remove = async (user: UserWithRoles) => {
-    if (!confirm(`Delete user "${user.username}"?`)) return;
+    if (!confirm(t("users.confirm_delete", { username: user.username }))) return;
     try {
       await deleteUser(user.id);
-      toast.add({ title: "User deleted", type: "success", timeout: 3000 });
+      toast.add({ title: t("users.deleted"), type: "success", timeout: 3000 });
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to delete user",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("users.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -160,8 +171,8 @@ export default function UsersPage() {
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to update user",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("users.update_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -171,7 +182,7 @@ export default function UsersPage() {
   if (meState.state === "loading") {
     return (
       <div className="flex flex-1 flex-col items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -179,9 +190,9 @@ export default function UsersPage() {
   if (!canAdmin) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center">
-        <p className="text-sm text-destructive">Super admin required.</p>
+        <p className="text-sm text-destructive">{t("users.super_admin_required")}</p>
         <Link to="/stations" className="mt-2 text-sm underline">
-          Back to stations
+          {t("users.back_to_stations")}
         </Link>
       </div>
     );
@@ -196,11 +207,12 @@ export default function UsersPage() {
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" render={<Link to="/settings" />}>
-            Settings
+            {t("nav.settings")}
           </Button>
           <span className="text-sm text-muted-foreground">
             {meState.state === "ready" && meState.me.user.display_name}
           </span>
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
@@ -208,26 +220,22 @@ export default function UsersPage() {
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-            <p className="text-sm text-muted-foreground">
-              Accounts and role grants. Roles apply globally or per station.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">{t("nav.users")}</h1>
+            <p className="text-sm text-muted-foreground">{t("users.subtitle")}</p>
           </div>
           <Dialog>
             <DialogTrigger render={<Button />}>
               <UsersIcon />
-              New user
+              {t("users.new_user")}
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>New user</DialogTitle>
-                <DialogDescription>
-                  Set an initial password; the user can change it later.
-                </DialogDescription>
+                <DialogTitle>{t("users.new_user")}</DialogTitle>
+                <DialogDescription>{t("users.new_user_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="username">Username</Label>
+                  <Label htmlFor="username">{t("login.username")}</Label>
                   <input
                     id="username"
                     value={username}
@@ -236,7 +244,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="display_name">Display name</Label>
+                  <Label htmlFor="display_name">{t("login.display_name")}</Label>
                   <input
                     id="display_name"
                     value={displayName}
@@ -245,7 +253,7 @@ export default function UsersPage() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("login.password")}</Label>
                   <input
                     id="password"
                     type="password"
@@ -261,10 +269,10 @@ export default function UsersPage() {
                     onChange={(e) => setIsSuperAdmin(e.target.checked)}
                     className="size-4"
                   />
-                  Super admin (full access)
+                  {t("users.super_admin")}
                 </label>
                 <div className="grid gap-2">
-                  <Label>Role grants</Label>
+                  <Label>{t("users.role_grants")}</Label>
                   <div className="grid gap-2 rounded-md border p-3">
                     {ROLES.map((role) => (
                       <div key={role.name}>
@@ -278,9 +286,9 @@ export default function UsersPage() {
                             onChange={() => toggleGrant(role.name, null)}
                             className="size-4"
                           />
-                          {role.label}
+                          {t(role.labelKey)}
                           <span className="text-xs text-muted-foreground">
-                            ({role.hint})
+                            ({t(role.hintKey)})
                           </span>
                         </label>
                         {stations.map((station) => {
@@ -318,7 +326,7 @@ export default function UsersPage() {
                   onClick={submit}
                   disabled={saving || !username || !password}
                 >
-                  {saving ? "Creating…" : "Create user"}
+                  {saving ? t("users.creating") : t("users.create")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -326,7 +334,7 @@ export default function UsersPage() {
         </div>
 
         {status.state === "loading" && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         )}
         {status.state === "error" && (
           <p className="text-sm text-destructive">{status.message}</p>
@@ -343,7 +351,7 @@ export default function UsersPage() {
                       </CardTitle>
                       <CardDescription>
                         @{user.username}
-                        {user.is_super_admin && " · super admin"}
+                        {user.is_super_admin && ` · ${t("users.super_admin_badge")}`}
                       </CardDescription>
                     </div>
                     <div className="flex shrink-0 gap-2">
@@ -352,23 +360,21 @@ export default function UsersPage() {
                         size="sm"
                         onClick={() => toggleSuper(user)}
                       >
-                        {user.is_super_admin ? "Demote" : "Make admin"}
+                        {user.is_super_admin ? t("users.demote") : t("users.make_admin")}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => remove(user)}
                       >
-                        Delete
+                        {t("common.delete")}
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-1.5 text-xs">
                   {user.roles.length === 0 && (
-                    <span className="text-muted-foreground">
-                      No role grants
-                    </span>
+                    <span className="text-muted-foreground">{t("users.no_grants")}</span>
                   )}
                   {user.roles.map((g) => (
                     <span
@@ -392,14 +398,12 @@ export default function UsersPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Audit log</CardTitle>
-                <CardDescription>
-                  Recent mutations, newest first.
-                </CardDescription>
+                <CardTitle className="text-base">{t("users.audit_log")}</CardTitle>
+                <CardDescription>{t("users.audit_desc")}</CardDescription>
               </CardHeader>
               <CardContent>
                 {status.audit.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nothing yet.</p>
+                  <p className="text-sm text-muted-foreground">{t("users.audit_empty")}</p>
                 ) : (
                   <ul className="grid gap-1.5 text-sm">
                     {status.audit.map((entry) => (
@@ -414,7 +418,7 @@ export default function UsersPage() {
                           {entry.detail || entry.target}
                         </span>
                         <span className="shrink-0 text-muted-foreground">
-                          {entry.user_id ?? "system"}
+                          {entry.user_id ?? t("users.system")}
                         </span>
                       </li>
                     ))}

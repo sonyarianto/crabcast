@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BellRing, Plus, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,14 +22,15 @@ import {
   type NotificationWebhook,
 } from "@/lib/api";
 
-const EVENT_LABELS: Record<string, string> = {
-  started: "On air",
-  stopped: "Off air",
-  crashed: "Crashed",
-  blank: "Dead air",
+const EVENT_KEYS: Record<string, string> = {
+  started: "webhooks.event_started",
+  stopped: "webhooks.event_stopped",
+  crashed: "webhooks.event_crashed",
+  blank: "webhooks.event_blank",
 };
 
 export function WebhooksCard({ stationId }: { stationId: string }) {
+  const { t } = useTranslation();
   const [webhooks, setWebhooks] = useState<NotificationWebhook[]>([]);
   const [url, setUrl] = useState("");
   const [events, setEvents] = useState<string[]>([]);
@@ -53,7 +55,7 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
   const add = async () => {
     if (!url.trim()) {
       toast.add({
-        title: "Webhook URL is required",
+        title: t("webhooks.url_required"),
         type: "error",
         timeout: 4000,
       });
@@ -69,11 +71,11 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
       setUrl("");
       setEvents([]);
       reload();
-      toast.add({ title: "Webhook added", type: "success", timeout: 3000 });
+      toast.add({ title: t("webhooks.added"), type: "success", timeout: 3000 });
     } catch (err) {
       toast.add({
-        title: "Failed to add webhook",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("webhooks.add_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -88,8 +90,8 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to delete webhook",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("webhooks.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -104,16 +106,13 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <BellRing className="size-4" />
-          Notifications
+          {t("webhooks.title")}
         </CardTitle>
-        <CardDescription>
-          Slack / Discord webhooks notified when the station goes on or off air,
-          crashes, or has dead air. Paste an incoming-webhook URL.
-        </CardDescription>
+        <CardDescription>{t("webhooks.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4">
         {webhooks.length === 0 && (
-          <p className="text-sm text-muted-foreground">No webhooks yet.</p>
+          <p className="text-sm text-muted-foreground">{t("webhooks.none")}</p>
         )}
         {webhooks.map((wh) => (
           <div
@@ -124,10 +123,10 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
               <p className="truncate font-medium">{wh.url}</p>
               <p className="text-xs text-muted-foreground">
                 {wh.events === "*"
-                  ? "All events"
+                  ? t("webhooks.all_events")
                   : wh.events
                       .split(",")
-                      .map((e) => EVENT_LABELS[e] ?? e)
+                      .map((e) => (EVENT_KEYS[e] ? t(EVENT_KEYS[e]) : e))
                       .join(", ")}
               </p>
             </div>
@@ -135,7 +134,7 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
               variant="ghost"
               size="sm"
               onClick={() => remove(wh.id)}
-              aria-label="Delete webhook"
+              aria-label={t("webhooks.delete_aria")}
             >
               <Trash2 className="size-4" />
             </Button>
@@ -143,7 +142,7 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
         ))}
 
         <div className="grid gap-2 border-t pt-4">
-          <Label htmlFor="wh-url">Incoming webhook URL</Label>
+          <Label htmlFor="wh-url">{t("webhooks.url_label")}</Label>
           <input
             id="wh-url"
             value={url}
@@ -160,18 +159,18 @@ export function WebhooksCard({ stationId }: { stationId: string }) {
                   onChange={() => toggleEvent(event)}
                   className="size-4 accent-[#7c3aed]"
                 />
-                {EVENT_LABELS[event]}
+                {t(EVENT_KEYS[event])}
               </label>
             ))}
             {events.length === 0 && (
               <span className="text-xs text-muted-foreground">
-                (none selected = all events)
+                {t("webhooks.none_selected")}
               </span>
             )}
           </div>
           <Button onClick={add} disabled={saving} className="mt-2 w-fit">
             <Plus />
-            {saving ? "Adding…" : "Add webhook"}
+            {saving ? t("webhooks.adding") : t("webhooks.add")}
           </Button>
         </div>
       </CardContent>

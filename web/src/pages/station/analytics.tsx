@@ -23,7 +23,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +74,7 @@ const RANGE_BUCKETS: Record<Range, number> = {
 };
 
 export default function AnalyticsPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const id = params.id!;
 
@@ -96,14 +99,14 @@ export default function AnalyticsPage() {
       })
       .catch((err: unknown) => {
         // A station that never had a sample is fine; a dead API is not.
-        setError(err instanceof Error ? err.message : "Unknown error");
+        setError(err instanceof Error ? err.message : t("common.unknown_error"));
       });
     listAlerts(id, false)
       .then(setAlerts)
       .catch(() => {
         // alerts are best-effort; don't clobber the page on failure
       });
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => {
     refreshRef.current = loadStats;
@@ -119,7 +122,7 @@ export default function AnalyticsPage() {
         setError(null);
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
 
     const interval = setInterval(() => {
@@ -131,7 +134,7 @@ export default function AnalyticsPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [id, loadStats]);
+  }, [id, loadStats, t]);
 
   // The window is computed in the effect below (Date.now is impure, so it
   // must not run during render); `days` is the pure part needed by the UI.
@@ -147,7 +150,7 @@ export default function AnalyticsPage() {
         if (!cancelled) setPoints(series.points);
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
     getTopSongs(id, days)
       .then((songs) => {
@@ -166,7 +169,7 @@ export default function AnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, days, range]);
+  }, [id, days, range, t]);
 
   const canManage =
     meState.state === "ready" &&
@@ -187,11 +190,11 @@ export default function AnalyticsPage() {
             : a,
         ),
       );
-      toast.add({ title: "Alert resolved", type: "success", timeout: 3000 });
+      toast.add({ title: t("analytics.alert_resolved"), type: "success", timeout: 3000 });
     } catch (err) {
       toast.add({
-        title: "Could not resolve alert",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("analytics.resolve_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -223,7 +226,7 @@ export default function AnalyticsPage() {
   if (!station) {
     return (
       <Shell {...shellProps}>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </Shell>
     );
   }
@@ -243,11 +246,9 @@ export default function AnalyticsPage() {
           </Link>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <BarChart3Icon className="size-6" />
-            Analytics
+            {t("analytics.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Listeners, top songs, requests, alerts and uptime.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("analytics.subtitle")}</p>
         </div>
         <div className="flex gap-2">
           {(["24h", "7d", "30d"] as const).map((r) => (
@@ -266,7 +267,7 @@ export default function AnalyticsPage() {
             render={<a href={historyCsvUrl(id, Math.max(days, 30))} />}
           >
             <DownloadIcon />
-            Export CSV
+            {t("analytics.export_csv")}
           </Button>
         </div>
       </div>
@@ -274,17 +275,17 @@ export default function AnalyticsPage() {
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <StatCard
           icon={<HeadphonesIcon className="size-4" />}
-          label="Listeners now"
+          label={t("analytics.listeners_now")}
           value={summary ? String(summary.current_listeners) : "—"}
         />
         <StatCard
           icon={<UsersIcon className="size-4" />}
-          label="Unique (24h)"
+          label={t("analytics.unique_24h")}
           value={summary ? String(summary.unique_listeners_24h) : "—"}
         />
         <StatCard
           icon={<ActivityIcon className="size-4" />}
-          label="Uptime (24h)"
+          label={t("analytics.uptime_24h")}
           value={
             summary?.uptime_percent_24h == null
               ? "—"
@@ -293,29 +294,25 @@ export default function AnalyticsPage() {
         />
         <StatCard
           icon={<Radio className="size-4" />}
-          label="Plays today"
+          label={t("analytics.plays_today")}
           value={summary ? String(summary.plays_today) : "—"}
         />
         <StatCard
           icon={<BellIcon className="size-4" />}
-          label="Requests today"
+          label={t("analytics.requests_today")}
           value={summary ? String(summary.requests_today) : "—"}
         />
       </div>
 
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-base">Listeners</CardTitle>
-          <CardDescription>
-            Polled from the Icecast admin API; connections is Icecast&apos;s
-            cumulative counter (unique listeners ≈ its delta).
-          </CardDescription>
+          <CardTitle className="text-base">{t("analytics.listeners_card")}</CardTitle>
+          <CardDescription>{t("analytics.listeners_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           {points.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No listener samples yet — they appear every minute once the
-              Icecast admin API responds.
+              {t("analytics.no_samples")}
             </p>
           ) : (
             <div className="h-64 w-full">
@@ -366,7 +363,9 @@ export default function AnalyticsPage() {
                     }
                     formatter={(value, name) => [
                       value,
-                      name === "listeners" ? "Listeners" : "Connections",
+                      name === "listeners"
+                        ? t("analytics.listeners_card")
+                        : t("analytics.connections"),
                     ]}
                   />
                   <Area
@@ -396,23 +395,21 @@ export default function AnalyticsPage() {
       <div className="mb-4 grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top songs</CardTitle>
-            <CardDescription>
-              Most played in the last {days} day(s).
-            </CardDescription>
+            <CardTitle className="text-base">{t("analytics.top_songs")}</CardTitle>
+            <CardDescription>{t("analytics.top_songs_desc", { days })}</CardDescription>
           </CardHeader>
           <CardContent>
             {topSongs.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No plays yet.</p>
+              <p className="text-sm text-muted-foreground">{t("analytics.no_plays")}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8">#</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead className="text-right">Plays</TableHead>
-                    <TableHead className="text-right">Air time</TableHead>
-                    <TableHead>Last played</TableHead>
+                    <TableHead>{t("analytics.title_col")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.plays_col")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.air_time")}</TableHead>
+                    <TableHead>{t("analytics.last_played")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -441,23 +438,21 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Requests</CardTitle>
-            <CardDescription>
-              Accepted, rejected and pending per day.
-            </CardDescription>
+            <CardTitle className="text-base">{t("analytics.requests_card")}</CardTitle>
+            <CardDescription>{t("analytics.requests_desc")}</CardDescription>
           </CardHeader>
           <CardContent>
             {requestDays.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No requests yet.</p>
+              <p className="text-sm text-muted-foreground">{t("requests.none")}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Day</TableHead>
-                    <TableHead className="text-right">Accepted</TableHead>
-                    <TableHead className="text-right">Rejected</TableHead>
-                    <TableHead className="text-right">Pending</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>{t("analytics.day_col")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.accepted")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.rejected")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.pending")}</TableHead>
+                    <TableHead className="text-right">{t("analytics.total")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -489,16 +484,13 @@ export default function AnalyticsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Alerts</CardTitle>
-          <CardDescription>
-            Dead air, engine crash loops, Icecast unreachable and disk space —
-            auto-resolved when conditions clear.
-          </CardDescription>
+          <CardTitle className="text-base">{t("analytics.alerts")}</CardTitle>
+          <CardDescription>{t("analytics.alerts_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           {alerts.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No alerts. {openAlerts.length === 0 && "All quiet."}
+              {t("analytics.no_alerts")} {openAlerts.length === 0 && t("analytics.all_quiet")}
             </p>
           ) : (
             <div className="space-y-2">
@@ -524,7 +516,9 @@ export default function AnalyticsPage() {
                       </span>
                       <span className="text-sm font-medium">{alert.title}</span>
                       <span className="text-xs text-muted-foreground">
-                        {alert.resolved_at === null ? "open" : "resolved"}
+                        {alert.resolved_at === null
+                          ? t("analytics.open")
+                          : t("analytics.resolved")}
                       </span>
                     </div>
                     {alert.detail && (
@@ -536,7 +530,9 @@ export default function AnalyticsPage() {
                       {alert.kind} ·{" "}
                       {new Date(alert.created_at).toLocaleString()}
                       {alert.resolved_at &&
-                        ` · resolved ${new Date(alert.resolved_at).toLocaleString()}`}
+                        ` · ${t("analytics.resolved_at", {
+                          time: new Date(alert.resolved_at).toLocaleString(),
+                        })}`}
                     </p>
                   </div>
                   {alert.resolved_at === null && canManage && (
@@ -545,7 +541,7 @@ export default function AnalyticsPage() {
                       size="sm"
                       onClick={() => resolve(alert.id)}
                     >
-                      Resolve
+                      {t("analytics.resolve")}
                     </Button>
                   )}
                 </div>
@@ -605,24 +601,25 @@ function Shell({
   me?: { displayName: string; isSuperAdmin: boolean } | null;
   onLogout?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2 font-semibold">
           <Radio className="size-5" />
-          Crabcast
+          {t("app.name")}
         </div>
         <div className="flex items-center gap-3">
           {me?.isSuperAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/library" />}>
-            Library
+            {t("nav.library")}
           </Button>
           <Button variant="ghost" size="sm" render={<Link to="/settings" />}>
-            Settings
+            {t("nav.settings")}
           </Button>
           {me && (
             <>
@@ -630,10 +627,11 @@ function Shell({
                 {me.displayName}
               </span>
               <Button variant="ghost" size="sm" onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>

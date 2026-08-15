@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { PlusIcon, Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,40 +68,46 @@ const defaultInput: StationInput = {
 
 const FIELDS: {
   key: keyof StationInput;
-  label: string;
+  labelKey: string;
   type: "text" | "number" | "password";
-  placeholder?: string;
+  placeholderKey?: string;
   colSpan?: string;
 }[] = [
-  { key: "name", label: "Name", type: "text", placeholder: "My radio" },
+  {
+    key: "name",
+    labelKey: "stations.field_name",
+    type: "text",
+    placeholderKey: "stations.placeholder_name",
+  },
   {
     key: "description",
-    label: "Description",
+    labelKey: "stations.field_description",
     type: "text",
-    placeholder: "What this station plays",
+    placeholderKey: "stations.placeholder_description",
     colSpan: "sm:col-span-2",
   },
-  { key: "playlist_dir", label: "Playlist directory", type: "text" },
-  { key: "jingles_dir", label: "Jingles directory", type: "text" },
-  { key: "harbor_port", label: "Harbor (DJ) port", type: "number" },
-  { key: "harbor_mount", label: "Harbor mount", type: "text" },
-  { key: "harbor_password", label: "Harbor password", type: "password" },
-  { key: "control_port", label: "Telnet port", type: "number" },
-  { key: "control_http_port", label: "HTTP control port", type: "number" },
-  { key: "icecast_host", label: "Icecast host", type: "text" },
-  { key: "icecast_port", label: "Icecast port", type: "number" },
-  { key: "icecast_mount", label: "Icecast mount", type: "text" },
-  { key: "icecast_format", label: "Format (mp3/opus)", type: "text" },
-  { key: "icecast_bitrate", label: "Bitrate (bps)", type: "number" },
-  { key: "icecast_source_user", label: "Icecast source user", type: "text" },
+  { key: "playlist_dir", labelKey: "stations.field_playlist_dir", type: "text" },
+  { key: "jingles_dir", labelKey: "stations.field_jingles_dir", type: "text" },
+  { key: "harbor_port", labelKey: "stations.field_harbor_port", type: "number" },
+  { key: "harbor_mount", labelKey: "stations.field_harbor_mount", type: "text" },
+  { key: "harbor_password", labelKey: "stations.field_harbor_password", type: "password" },
+  { key: "control_port", labelKey: "stations.field_control_port", type: "number" },
+  { key: "control_http_port", labelKey: "stations.field_control_http_port", type: "number" },
+  { key: "icecast_host", labelKey: "stations.field_icecast_host", type: "text" },
+  { key: "icecast_port", labelKey: "stations.field_icecast_port", type: "number" },
+  { key: "icecast_mount", labelKey: "stations.field_icecast_mount", type: "text" },
+  { key: "icecast_format", labelKey: "stations.field_icecast_format", type: "text" },
+  { key: "icecast_bitrate", labelKey: "stations.field_icecast_bitrate", type: "number" },
+  { key: "icecast_source_user", labelKey: "stations.field_icecast_source_user", type: "text" },
   {
     key: "icecast_source_password",
-    label: "Icecast source password",
+    labelKey: "stations.field_icecast_source_password",
     type: "password",
   },
 ];
 
 export default function StationsPage() {
+  const { t } = useTranslation();
   const { meState, refresh } = useMe();
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [form, setForm] = useState<StationInput>(defaultInput);
@@ -112,10 +120,10 @@ export default function StationsPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     listStations()
@@ -123,17 +131,17 @@ export default function StationsPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, []);
+  }, [t]);
 
   const submit = async () => {
     setSaving(true);
     try {
       await createStation(form);
       toast.add({
-        title: "Station created",
+        title: t("welcome.station_created"),
         type: "success",
         timeout: 3000,
       });
@@ -141,8 +149,8 @@ export default function StationsPage() {
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to create station",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("stations.failed_create"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -152,17 +160,21 @@ export default function StationsPage() {
   };
 
   const remove = async (station: Station) => {
-    if (!confirm(`Delete "${station.name}"? Its engine will be stopped.`)) {
+    if (!confirm(t("stations.confirm_delete", { name: station.name }))) {
       return;
     }
     try {
       await deleteStation(station.id);
-      toast.add({ title: "Station deleted", type: "success", timeout: 3000 });
+      toast.add({
+        title: t("stations.station_deleted"),
+        type: "success",
+        timeout: 3000,
+      });
       reload();
     } catch (err) {
       toast.add({
-        title: "Failed to delete station",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("stations.failed_delete"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -179,11 +191,11 @@ export default function StationsPage() {
         <div className="flex items-center gap-3">
           {meState.state === "ready" && meState.me.user.is_super_admin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/library" />}>
-            Library
+            {t("nav.library")}
           </Button>
           {meState.state === "ready" && (
             <>
@@ -198,10 +210,11 @@ export default function StationsPage() {
                   refresh();
                 }}
               >
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
@@ -209,23 +222,20 @@ export default function StationsPage() {
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Stations</h1>
-            <p className="text-sm text-muted-foreground">
-              One supervised Crabsoup engine per station.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("stations.title")}
+            </h1>
+            <p className="text-sm text-muted-foreground">{t("stations.subtitle")}</p>
           </div>
           <Dialog>
             <DialogTrigger render={<Button />}>
               <PlusIcon />
-              New station
+              {t("stations.new_station")}
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>New station</DialogTitle>
-                <DialogDescription>
-                  The engine is validated with `crabsoup --check` before the
-                  station starts.
-                </DialogDescription>
+                <DialogTitle>{t("stations.new_station")}</DialogTitle>
+                <DialogDescription>{t("stations.dialog_desc")}</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 sm:grid-cols-2">
                 {FIELDS.map((field) => (
@@ -233,7 +243,7 @@ export default function StationsPage() {
                     key={field.key}
                     className={field.colSpan ?? "grid gap-2"}
                   >
-                    <Label htmlFor={field.key}>{field.label}</Label>
+                    <Label htmlFor={field.key}>{t(field.labelKey)}</Label>
                     <input
                       id={field.key}
                       type={field.type}
@@ -247,7 +257,7 @@ export default function StationsPage() {
                               : e.target.value,
                         }))
                       }
-                      placeholder={field.placeholder}
+                      placeholder={field.placeholderKey ? t(field.placeholderKey) : undefined}
                       className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                     />
                   </div>
@@ -255,7 +265,7 @@ export default function StationsPage() {
               </div>
               <DialogFooter>
                 <Button onClick={submit} disabled={saving}>
-                  {saving ? "Starting engine…" : "Create station"}
+                  {saving ? t("stations.starting_engine") : t("welcome.create_station")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -263,7 +273,7 @@ export default function StationsPage() {
         </div>
 
         {status.state === "loading" && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         )}
         {status.state === "error" && (
           <p className="text-sm text-destructive">{status.message}</p>
@@ -271,10 +281,8 @@ export default function StationsPage() {
         {status.state === "ok" && status.stations.length === 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>No stations yet</CardTitle>
-              <CardDescription>
-                Create your first station to spin up an engine.
-              </CardDescription>
+              <CardTitle>{t("stations.no_stations")}</CardTitle>
+              <CardDescription>{t("stations.no_stations_desc")}</CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -295,14 +303,14 @@ export default function StationsPage() {
                       size="sm"
                       render={<Link to={`/stations/${station.id}`} />}
                     >
-                      Details
+                      {t("stations.details")}
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => remove(station)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </div>
                 </div>

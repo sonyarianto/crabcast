@@ -89,4 +89,5 @@ Two supported paths (details in `packaging/README.md` and
 - HLS ships with 2s segments and the player's low-latency mode (~5s
   end-to-end); true Apple LL-HLS (EXT-X-PART partial segments) is a
   stretch goal.
-- i18n (non-English UI) is not shipped yet.
+- i18n ships English + Indonesian (browser-detected, switchable); more
+  locales and full RTL layout work remain.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   MicVocal,
   Pencil,
@@ -10,6 +10,7 @@ import {
   Trash,
   Users,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,7 @@ export function StreamersCard({
   /** True while a DJ holds the harbor; the playlist is ducked. */
   live: boolean;
 }) {
+  const { t } = useTranslation();
   const [streamers, setStreamers] = useState<Streamer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -71,18 +73,17 @@ export function StreamersCard({
     null,
   );
 
-  const reload = () => {
+  const reload = useCallback(() => {
     listStreamers(stationId)
       .then(setStreamers)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
-  };
+  }, [stationId, t]);
 
   useEffect(() => {
     reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stationId]);
+  }, [reload]);
 
   const openCreate = () => {
     setEditing(null);
@@ -103,7 +104,7 @@ export function StreamersCard({
 
   const save = async () => {
     if (!form.name.trim()) {
-      toast.add({ title: "Name is required", type: "error", timeout: 4000 });
+      toast.add({ title: t("streamers.name_required"), type: "error", timeout: 4000 });
       return;
     }
     const input: StreamerInput = {
@@ -116,14 +117,14 @@ export function StreamersCard({
       if (editing) {
         await updateStreamer(editing.id, input);
         toast.add({
-          title: "Streamer updated",
+          title: t("streamers.updated"),
           type: "success",
           timeout: 3000,
         });
       } else {
         await createStreamer(stationId, input);
         toast.add({
-          title: "Streamer created",
+          title: t("streamers.created"),
           type: "success",
           timeout: 3000,
         });
@@ -132,8 +133,8 @@ export function StreamersCard({
       reload();
     } catch (err) {
       toast.add({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("requests.save_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -144,15 +145,15 @@ export function StreamersCard({
     try {
       await deleteStreamer(s.id);
       toast.add({
-        title: `Streamer ${s.name} deleted`,
+        title: t("streamers.deleted", { name: s.name }),
         type: "success",
         timeout: 3000,
       });
       reload();
     } catch (err) {
       toast.add({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("streamers.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -164,8 +165,8 @@ export function StreamersCard({
       setConnectInfo(await getStreamerConnectInfo(s.id));
     } catch (err) {
       toast.add({
-        title: "Connect info failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("streamers.connect_info_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -178,7 +179,7 @@ export function StreamersCard({
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2">
             <Users className="size-4" />
-            Streamers
+            {t("streamers.title")}
             {live && (
               <span className="text-destructive-foreground inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold">
                 <span className="size-1.5 rounded-full bg-current" />
@@ -188,30 +189,23 @@ export function StreamersCard({
           </span>
           <Button variant="outline" size="sm" onClick={openCreate}>
             <Plus />
-            Add streamer
+            {t("streamers.add")}
           </Button>
         </CardTitle>
-        <CardDescription>
-          Live DJ accounts — each has its own source password for the station
-          mount. When a DJ connects, the playlist ducks out until they
-          disconnect.
-        </CardDescription>
+        <CardDescription>{t("streamers.desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         {live && (
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm">
-            <span className="font-semibold text-destructive">On air:</span> a DJ
-            is broadcasting — the playlist is ducked and will fade back in on
-            disconnect.
+            <span className="font-semibold text-destructive">{t("streamers.on_air_label")}</span>
+            {t("streamers.on_air_desc")}
           </div>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         {streamers === null && !error ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : streamers && streamers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No streamers yet. Add one to hand out source credentials.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("streamers.none")}</p>
         ) : (
           <ul className="divide-y">
             {streamers?.map((s) => (
@@ -224,7 +218,7 @@ export function StreamersCard({
                     <span className="font-medium">{s.name}</span>
                     {!s.enabled && (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                        disabled
+                        {t("common.disabled")}
                       </span>
                     )}
                   </div>
@@ -239,7 +233,7 @@ export function StreamersCard({
                     onClick={() => openConnect(s)}
                   >
                     <RadioTower />
-                    Connect
+                    {t("streamers.connect")}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => openEdit(s)}>
                     <Pencil />
@@ -264,41 +258,41 @@ export function StreamersCard({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editing ? `Edit ${editing.name}` : "Add streamer"}
+              {editing
+                ? t("streamers.edit", { name: editing.name })
+                : t("streamers.add")}
             </DialogTitle>
-            <DialogDescription>
-              Give the DJ their mount URL and source password below.
-            </DialogDescription>
+            <DialogDescription>{t("streamers.form_desc")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="st-name">Name</Label>
+              <Label htmlFor="st-name">{t("streamers.name")}</Label>
               <input
                 id="st-name"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="DJ Sarah"
+                placeholder={t("streamers.name_placeholder")}
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="st-desc">Description</Label>
+              <Label htmlFor="st-desc">{t("streamers.description")}</Label>
               <input
                 id="st-desc"
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
                 }
-                placeholder="Weekend daytime slot"
+                placeholder={t("streamers.desc_placeholder")}
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="st-pw">
-                Source password{" "}
+                {t("streamers.source_password")}{" "}
                 {editing && (
                   <span className="text-xs text-muted-foreground">
-                    (blank keeps the current one)
+                    {t("streamers.blank_keeps")}
                   </span>
                 )}
               </Label>
@@ -320,15 +314,15 @@ export function StreamersCard({
                   setForm({ ...form, enabled: e.target.checked })
                 }
               />
-              Enabled (password accepted by the harbor)
+              {t("streamers.enabled_hint")}
             </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={save}>
-              {editing ? "Save changes" : "Add streamer"}
+              {editing ? t("streamers.save_changes") : t("streamers.add")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -345,23 +339,21 @@ export function StreamersCard({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <MicVocal className="size-4" />
-              Connect — {connectInfo?.streamer.name}
+              {t("streamers.connect_title", { name: connectInfo?.streamer.name ?? "" })}
             </DialogTitle>
-            <DialogDescription>
-              Point any Icecast source client at the station mount.
-            </DialogDescription>
+            <DialogDescription>{t("streamers.connect_desc")}</DialogDescription>
           </DialogHeader>
           {connectInfo && (
             <div className="grid gap-4 text-sm">
               <div className="grid gap-1">
-                <span className="text-xs text-muted-foreground">URL</span>
+                <span className="text-xs text-muted-foreground">{t("streamers.url")}</span>
                 <code className="rounded bg-muted px-2 py-1">
                   {connectInfo.mount_url}
                 </code>
               </div>
               <div className="grid gap-1">
                 <span className="text-xs text-muted-foreground">
-                  Username / password
+                  {t("streamers.username_password")}
                 </span>
                 <code className="rounded bg-muted px-2 py-1">
                   source / {connectInfo.streamer.source_password}
@@ -370,21 +362,20 @@ export function StreamersCard({
               <div className="grid gap-1">
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Terminal className="size-3" />
-                  Mic test (copy-paste)
+                  {t("streamers.mic_test")}
                 </span>
                 <pre className="overflow-x-auto rounded bg-muted p-2 text-xs">
                   {connectInfo.curl_mic_test}
                 </pre>
               </div>
               <p className="text-xs text-muted-foreground">
-                The playlist ducks out while you are connected and fades back in
-                when you disconnect. Only one DJ can broadcast at a time.
+                {t("streamers.connect_note")}
               </p>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setConnectInfo(null)}>
-              Close
+              {t("common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Link2, Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { StationPlayer } from "@/components/station-player";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 const POLL_MS = 10_000;
 
 export default function PublicStationPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const stationId = params.id!;
 
@@ -32,9 +34,9 @@ export default function PublicStationPage() {
     getPublicStation(stationId)
       .then(setStation)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   useEffect(() => {
     load();
@@ -66,14 +68,14 @@ export default function PublicStationPage() {
       await createRequest(stationId, hit.id);
       setRequested((prev) => new Set(prev).add(hit.id));
       toast.add({
-        title: `Requested: ${hit.title || hit.filename}`,
+        title: t("public.requested", { title: hit.title || hit.filename }),
         type: "success",
         timeout: 3000,
       });
     } catch (err) {
       toast.add({
-        title: "Request failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("public.request_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -82,10 +84,10 @@ export default function PublicStationPage() {
 
   const socials: { label: string; url: string }[] = station
     ? [
-        { label: "Website", url: station.website },
-        { label: "Facebook", url: station.facebook },
-        { label: "X", url: station.twitter },
-        { label: "Instagram", url: station.instagram },
+        { label: t("profile.website"), url: station.website },
+        { label: t("profile.facebook"), url: station.facebook },
+        { label: t("public.x"), url: station.twitter },
+        { label: t("profile.instagram"), url: station.instagram },
       ].filter((s) => s.url.trim())
     : [];
 
@@ -93,16 +95,14 @@ export default function PublicStationPage() {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-6">
         <p className="text-sm text-destructive">{error}</p>
-        <p className="text-sm text-muted-foreground">
-          This station may not exist or is not broadcasting yet.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("public.not_found")}</p>
       </div>
     );
   }
   if (!station) {
     return (
       <div className="flex min-h-dvh items-center justify-center p-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </div>
     );
   }
@@ -141,7 +141,7 @@ export default function PublicStationPage() {
         <div className="rounded-xl border bg-card p-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium tracking-wide text-muted-foreground">
-              NOW PLAYING
+              {t("station.now_playing")}
             </span>
             <span
               className={`size-2 rounded-full ${
@@ -152,7 +152,7 @@ export default function PublicStationPage() {
             />
           </div>
           <p className="mb-4 truncate text-lg font-semibold">
-            {station.now?.title ?? "Off air — check back soon"}
+            {station.now?.title ?? t("public.off_air_soon")}
           </p>
           <StationPlayer
             streamUrl={station.stream_url}
@@ -163,26 +163,23 @@ export default function PublicStationPage() {
         {/* Request form */}
         {station.requests_enabled && (
           <section className="rounded-xl border bg-card p-5">
-            <h2 className="mb-1 text-sm font-semibold">Request a song</h2>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Search the library and request a track — it plays on air within
-              seconds.
-            </p>
+            <h2 className="mb-1 text-sm font-semibold">{t("public.request_song")}</h2>
+            <p className="mb-3 text-xs text-muted-foreground">{t("public.request_hint")}</p>
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
-              placeholder="Search artist or title…"
+              placeholder={t("public.search_placeholder")}
               className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
             <ul className="mt-3 divide-y">
               {searching && (
                 <li className="py-2 text-sm text-muted-foreground">
-                  Searching…
+                  {t("public.searching")}
                 </li>
               )}
               {!searching && query.trim() && results.length === 0 && (
                 <li className="py-2 text-sm text-muted-foreground">
-                  No matches.
+                  {t("playlists.no_matches")}
                 </li>
               )}
               {results.map((hit) => (
@@ -206,7 +203,7 @@ export default function PublicStationPage() {
                     disabled={requested.has(hit.id)}
                     onClick={() => request(hit)}
                   >
-                    {requested.has(hit.id) ? "Requested" : "Request"}
+                    {requested.has(hit.id) ? t("public.requested_btn") : t("public.request_btn")}
                   </Button>
                 </li>
               ))}
@@ -216,11 +213,9 @@ export default function PublicStationPage() {
 
         {/* History */}
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Recently played</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t("public.recently_played")}</h2>
           {station.history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nothing has played yet.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("public.nothing_played")}</p>
           ) : (
             <ul className="divide-y">
               {station.history.map((h) => (

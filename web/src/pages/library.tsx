@@ -18,7 +18,9 @@ import {
   UploadIcon,
   XIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +84,7 @@ const FALLBACK_QUERY: LibraryQuery = {
 };
 
 export default function LibraryPage() {
+  const { t } = useTranslation();
   const { meState, refresh } = useMe();
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
   const [query, setQuery] = useState<LibraryQuery>(FALLBACK_QUERY);
@@ -112,10 +115,10 @@ export default function LibraryPage() {
       .catch((err: unknown) =>
         setLoaded({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     getMediaFacets()
@@ -168,8 +171,8 @@ export default function LibraryPage() {
     );
     if (audio.length === 0) {
       toast.add({
-        title: "No audio files",
-        description: "Pick MP3, FLAC, Ogg, M4A, AAC or WAV files.",
+        title: t("library.no_audio"),
+        description: t("library.no_audio_desc"),
         type: "error",
         timeout: 5000,
       });
@@ -182,11 +185,11 @@ export default function LibraryPage() {
       const dupes = results.filter((r) => r.status === "duplicate").length;
       const errors = results.filter((r) => r.status === "error");
       toast.add({
-        title: `Uploaded ${created} file${created === 1 ? "" : "s"}`,
+        title: t("library.uploaded", { count: created }),
         description:
           [
-            dupes ? `${dupes} duplicate${dupes === 1 ? "" : "s"} skipped` : "",
-            errors.length ? `${errors.length} failed` : "",
+            dupes ? t("library.dupes_skipped", { count: dupes }) : "",
+            errors.length ? t("library.errors_failed", { count: errors.length }) : "",
           ]
             .filter(Boolean)
             .join(" · ") || undefined,
@@ -196,7 +199,7 @@ export default function LibraryPage() {
       for (const e of errors.slice(0, 3)) {
         toast.add({
           title: e.filename,
-          description: e.message ?? "upload failed",
+          description: e.message ?? t("library.upload_failed_short"),
           type: "error",
           timeout: 4000,
         });
@@ -205,8 +208,8 @@ export default function LibraryPage() {
       reload({ ...query, q: query.q }, 0);
     } catch (err) {
       toast.add({
-        title: "Upload failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("library.upload_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -235,14 +238,14 @@ export default function LibraryPage() {
     if (!editing) return;
     try {
       await updateMediaTags(editing.id, input);
-      toast.add({ title: "Tags saved", type: "success", timeout: 3000 });
+      toast.add({ title: t("library.tags_saved"), type: "success", timeout: 3000 });
       setEditing(null);
       reload(query, offset);
       if (preview?.id === editing.id) setPreview(null);
     } catch (err) {
       toast.add({
-        title: "Failed to save tags",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("library.tags_save_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -250,17 +253,16 @@ export default function LibraryPage() {
   };
 
   const remove = async (file: MediaFile) => {
-    if (!confirm(`Delete "${file.title}"? The file is removed from storage.`))
-      return;
+    if (!confirm(t("library.confirm_delete", { title: file.title }))) return;
     try {
       await deleteMedia(file.id);
-      toast.add({ title: "File deleted", type: "success", timeout: 3000 });
+      toast.add({ title: t("library.file_deleted"), type: "success", timeout: 3000 });
       if (preview?.id === file.id) setPreview(null);
       reload(query, offset);
     } catch (err) {
       toast.add({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("library.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -279,14 +281,14 @@ export default function LibraryPage() {
         <div className="flex items-center gap-3">
           {isAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/stations" />}>
-            Stations
+            {t("nav.stations")}
           </Button>
           <Button variant="ghost" size="sm" render={<Link to="/settings" />}>
-            Settings
+            {t("nav.settings")}
           </Button>
           {meState.state === "ready" && (
             <>
@@ -301,10 +303,11 @@ export default function LibraryPage() {
                   refresh();
                 }}
               >
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
@@ -313,12 +316,9 @@ export default function LibraryPage() {
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              Media library
+              {t("library.title")}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Upload once, tag it, and point a station&apos;s playlist directory
-              at the library to play it on air.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("library.subtitle")}</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -327,20 +327,17 @@ export default function LibraryPage() {
               onClick={() => reload(query, offset)}
             >
               <RefreshCwIcon />
-              Refresh
+              {t("library.refresh")}
             </Button>
             <Dialog>
               <DialogTrigger render={<Button />}>
                 <UploadIcon />
-                Upload
+                {t("library.upload")}
               </DialogTrigger>
               <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Upload music</DialogTitle>
-                  <DialogDescription>
-                    Drop files anywhere on the page, or pick them here.
-                    Duplicates are skipped automatically.
-                  </DialogDescription>
+                  <DialogTitle>{t("library.upload_title")}</DialogTitle>
+                  <DialogDescription>{t("library.upload_desc")}</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4">
                   <input
@@ -356,12 +353,11 @@ export default function LibraryPage() {
                   />
                   {loaded.state === "ok" && (
                     <p className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
-                      Files are stored in{" "}
+                      {t("library.stored_in_prefix")}{" "}
                       <code className="rounded bg-muted px-1">
                         {loaded.config.storage_dir}
                       </code>
-                      . Set a station&apos;s <em>playlist directory</em> to that
-                      path to broadcast the library.
+                      {t("library.stored_in_suffix")}
                     </p>
                   )}
                 </div>
@@ -373,10 +369,10 @@ export default function LibraryPage() {
                     {uploading ? (
                       <>
                         <LoaderIcon className="animate-spin" />
-                        Uploading…
+                        {t("common.uploading")}
                       </>
                     ) : (
-                      "Choose files"
+                      t("library.choose_files")
                     )}
                   </Button>
                 </DialogFooter>
@@ -404,11 +400,11 @@ export default function LibraryPage() {
           {uploading ? (
             <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
               <LoaderIcon className="size-4 animate-spin" />
-              Uploading…
+              {t("common.uploading")}
             </div>
           ) : (
             <p className="py-1 text-center text-sm text-muted-foreground">
-              Drop audio files here to upload (drag &amp; drop)
+              {t("library.drop_hint")}
             </p>
           )}
         </div>
@@ -420,7 +416,7 @@ export default function LibraryPage() {
             <input
               defaultValue={query.q}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search title, artist, album, filename…"
+              placeholder={t("library.search_placeholder")}
               className="h-9 w-full rounded-md border border-input bg-transparent pr-3 pl-8 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
           </div>
@@ -429,7 +425,7 @@ export default function LibraryPage() {
             onChange={(e) => setFilter("artist", e.target.value)}
             className="h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none"
           >
-            <option value="">All artists</option>
+            <option value="">{t("library.all_artists")}</option>
             {facets.artists.map((a) => (
               <option key={a} value={a}>
                 {a}
@@ -441,7 +437,7 @@ export default function LibraryPage() {
             onChange={(e) => setFilter("album", e.target.value)}
             className="h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none"
           >
-            <option value="">All albums</option>
+            <option value="">{t("library.all_albums")}</option>
             {facets.albums.map((a) => (
               <option key={a} value={a}>
                 {a}
@@ -453,7 +449,7 @@ export default function LibraryPage() {
             onChange={(e) => setFilter("genre", e.target.value)}
             className="h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none"
           >
-            <option value="">All genres</option>
+            <option value="">{t("library.all_genres")}</option>
             {facets.genres.map((g) => (
               <option key={g} value={g}>
                 {g}
@@ -481,7 +477,7 @@ export default function LibraryPage() {
         </div>
 
         {loaded.state === "loading" && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         )}
         {loaded.state === "error" && (
           <p className="text-sm text-destructive">{loaded.message}</p>
@@ -491,12 +487,12 @@ export default function LibraryPage() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  No tracks{query.q ? " match your search" : " yet"}
+                  {query.q ? t("library.no_tracks_search") : t("library.no_tracks")}
                 </CardTitle>
                 <CardDescription>
                   {query.q
-                    ? "Try a different search or clear the filters."
-                    : "Upload audio files to start building the library."}
+                    ? t("library.no_tracks_search_desc")
+                    : t("library.no_tracks_desc")}
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -521,8 +517,11 @@ export default function LibraryPage() {
         {loaded.state === "ok" && loaded.data.total > PAGE_SIZE && (
           <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
             <span>
-              {offset + 1}–{Math.min(offset + PAGE_SIZE, loaded.data.total)} of{" "}
-              {loaded.data.total}
+              {t("library.pagination", {
+                from: offset + 1,
+                to: Math.min(offset + PAGE_SIZE, loaded.data.total),
+                total: loaded.data.total,
+              })}
             </span>
             <div className="flex gap-2">
               <Button
@@ -531,7 +530,7 @@ export default function LibraryPage() {
                 disabled={offset === 0}
                 onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
               >
-                Previous
+                {t("library.previous")}
               </Button>
               <Button
                 variant="outline"
@@ -539,7 +538,7 @@ export default function LibraryPage() {
                 disabled={offset + PAGE_SIZE >= loaded.data.total}
                 onClick={() => setOffset((o) => o + PAGE_SIZE)}
               >
-                Next
+                {t("library.next")}
               </Button>
             </div>
           </div>
@@ -609,6 +608,7 @@ function TrackTable({
   onSort: (col: string) => void;
   sortIndicator: (col: string) => React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="overflow-hidden rounded-lg border">
       <table className="w-full text-sm">
@@ -621,14 +621,14 @@ function TrackTable({
                     className="inline-flex items-center gap-0.5 capitalize hover:text-foreground"
                     onClick={() => onSort(col)}
                   >
-                    {col === "duration" ? "Length" : col}
+                    {t(`library.col_${col === "duration" ? "length" : col}`)}
                     {sortIndicator(col)}
                   </button>
                 </th>
               ),
             )}
-            <th className="px-3 py-2 font-medium">Size</th>
-            <th className="px-3 py-2 text-right font-medium">Actions</th>
+            <th className="px-3 py-2 font-medium">{t("library.col_size")}</th>
+            <th className="px-3 py-2 text-right font-medium">{t("library.col_actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -707,6 +707,7 @@ function TrackGrid({
   onEdit: (f: MediaFile) => void;
   onDelete: (f: MediaFile) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {items.map((file) => (
@@ -723,13 +724,13 @@ function TrackGrid({
           <CardContent className="p-3">
             <p className="truncate text-sm font-medium">{file.title}</p>
             <p className="truncate text-xs text-muted-foreground">
-              {file.artist || "Unknown artist"} ·{" "}
+              {file.artist || t("library.unknown_artist")} ·{" "}
               {formatDuration(file.duration_seconds)}
             </p>
             <div className="mt-2 flex gap-1">
               <Button variant="ghost" size="xs" onClick={() => onEdit(file)}>
                 <PencilIcon />
-                Edit
+                {t("common.edit")}
               </Button>
               <Button
                 variant="ghost"
@@ -784,6 +785,7 @@ function EditDialog({
     genre: string;
   }) => void;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState({
     title: file.title,
     artist: file.artist,
@@ -794,18 +796,16 @@ function EditDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit tags</DialogTitle>
-          <DialogDescription>
-            Changes are written back into the audio file&apos;s tags.
-          </DialogDescription>
+          <DialogTitle>{t("library.edit_tags")}</DialogTitle>
+          <DialogDescription>{t("library.edit_tags_desc")}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           {(
             [
-              ["title", "Title"],
-              ["artist", "Artist"],
-              ["album", "Album"],
-              ["genre", "Genre"],
+              ["title", t("library.title_field")],
+              ["artist", t("library.artist_field")],
+              ["album", t("library.album_field")],
+              ["genre", t("library.genre_field")],
             ] as const
           ).map(([key, label]) => (
             <div key={key} className="grid gap-2">
@@ -823,9 +823,9 @@ function EditDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
-          <Button onClick={() => onSave(form)}>Save tags</Button>
+          <Button onClick={() => onSave(form)}>{t("library.save_tags")}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

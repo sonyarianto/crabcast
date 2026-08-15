@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Card,
@@ -20,6 +22,7 @@ type Status =
   | { state: "error"; message: string };
 
 export default function Home() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<Status>({ state: "loading" });
   const [freshInstall, setFreshInstall] = useState(false);
 
@@ -30,7 +33,7 @@ export default function Home() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
     // Fresh install (signed in, no stations yet): surface the wizard.
@@ -44,36 +47,33 @@ export default function Home() {
         // anonymous; nothing to offer
       });
     return () => controller.abort();
-  }, []);
+  }, [t]);
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2 font-semibold">
           <Radio className="size-5" />
-          Crabcast
+          {t("app.name")}
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-4 py-16">
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">
-            Radio management, in Rust
+            {t("home.title")}
           </h1>
-          <p className="text-muted-foreground">
-            Crabcast is an AzuraCast-style platform: multi-station, playlist
-            automation, live DJ support, requests, and analytics — powered by
-            the Crabsoup engine.
-          </p>
+          <p className="text-muted-foreground">{t("home.subtitle")}</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>API health</CardTitle>
-            <CardDescription>
-              Live check against the Rust backend (axum + SQLite).
-            </CardDescription>
+            <CardTitle>{t("home.api_health")}</CardTitle>
+            <CardDescription>{t("home.api_health_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
             <span
@@ -87,7 +87,7 @@ export default function Home() {
             />
             {status.state === "loading" && (
               <span className="text-sm text-muted-foreground">
-                Checking API…
+                {t("home.checking_api")}
               </span>
             )}
             {status.state === "ok" && (
@@ -101,32 +101,26 @@ export default function Home() {
             )}
             {status.state === "error" && (
               <span className="text-sm text-destructive">
-                API unreachable — is the server running? ({status.message})
+                {t("home.api_unreachable", { message: status.message })}
               </span>
             )}
           </CardContent>
         </Card>
 
-        <p className="text-sm text-muted-foreground">
-          Phase 1 live: station control plane with the Crabsoup engine. Media
-          library, requests, and analytics land in the next phases.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("home.phase_note")}</p>
 
         {freshInstall && (
           <Card className="border-primary/40">
             <CardHeader>
-              <CardTitle>Let&apos;s get you on air</CardTitle>
-              <CardDescription>
-                Your first station is a few clicks away — create it, drop in
-                some music, and you&apos;re live.
-              </CardDescription>
+              <CardTitle>{t("home.lets_go_live")}</CardTitle>
+              <CardDescription>{t("home.fresh_install_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <Link
                 to="/welcome"
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-[color,box-shadow] outline-none hover:bg-primary/90 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
-                Set up your first station
+                {t("home.setup_first_station")}
               </Link>
             </CardContent>
           </Card>
@@ -136,7 +130,7 @@ export default function Home() {
           to="/stations"
           className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-xs transition-[color,box-shadow] outline-none hover:bg-primary/90 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          Go to stations dashboard
+          {t("home.go_stations")}
         </Link>
       </main>
     </div>

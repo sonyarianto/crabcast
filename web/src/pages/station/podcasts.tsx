@@ -12,7 +12,9 @@ import {
   SearchIcon,
   Trash2Icon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +53,7 @@ type Status =
   | { state: "error"; message: string };
 
 export default function PodcastsPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const stationId = params.id!;
   const { meState } = useMe();
@@ -62,10 +65,10 @@ export default function PodcastsPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   useEffect(() => {
     listPodcasts(stationId)
@@ -73,20 +76,20 @@ export default function PodcastsPage() {
       .catch((err: unknown) =>
         setStatus({
           state: "error",
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: err instanceof Error ? err.message : t("common.unknown_error"),
         }),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   const remove = async (episode: PodcastEpisode) => {
     try {
       await deletePodcastEpisode(episode.id);
-      toast.add({ title: "Episode deleted", type: "success", timeout: 3000 });
+      toast.add({ title: t("podcasts.episode_deleted"), type: "success", timeout: 3000 });
       reload();
     } catch (err) {
       toast.add({
-        title: "Could not delete episode",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("podcasts.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -114,12 +117,9 @@ export default function PodcastsPage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
             <Mic2Icon className="size-6" />
-            Podcasts
+            {t("podcasts.title")}
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Publish audio as episodes with an RSS feed any podcast app can
-            subscribe to.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("podcasts.subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -128,14 +128,14 @@ export default function PodcastsPage() {
             render={<a href={podcastRssUrl(stationId)} target="_blank" />}
           >
             <RssIcon />
-            RSS feed
+            {t("podcasts.rss_feed")}
           </Button>
           <CreateEpisodeDialog
             stationId={stationId}
             onCreated={() => {
               reload();
               toast.add({
-                title: "Episode published",
+                title: t("podcasts.episode_published"),
                 type: "success",
                 timeout: 3000,
               });
@@ -145,7 +145,7 @@ export default function PodcastsPage() {
       </div>
 
       {status.state === "loading" && (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       )}
       {status.state === "error" && (
         <p className="text-sm text-destructive">{status.message}</p>
@@ -153,11 +153,8 @@ export default function PodcastsPage() {
       {status.state === "ok" && status.episodes.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">No episodes yet</CardTitle>
-            <CardDescription>
-              Publish your first episode — pick an audio file from the library
-              and give it a title.
-            </CardDescription>
+            <CardTitle className="text-base">{t("podcasts.no_episodes")}</CardTitle>
+            <CardDescription>{t("podcasts.no_episodes_desc")}</CardDescription>
           </CardHeader>
         </Card>
       )}
@@ -173,12 +170,14 @@ export default function PodcastsPage() {
                   </p>
                 )}
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Published {new Date(ep.created_at).toLocaleString()}
+                  {t("podcasts.published", {
+                    time: new Date(ep.created_at).toLocaleString(),
+                  })}
                 </p>
               </div>
               <Button variant="ghost" size="sm" onClick={() => void remove(ep)}>
                 <Trash2Icon />
-                Delete
+                {t("common.delete")}
               </Button>
             </CardContent>
           </Card>
@@ -197,6 +196,7 @@ function CreateEpisodeDialog({
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const { t } = useTranslation();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<MediaFile[]>([]);
   const [picked, setPicked] = useState<MediaFile | null>(null);
@@ -231,8 +231,8 @@ function CreateEpisodeDialog({
       onCreated();
     } catch (err) {
       toast.add({
-        title: "Could not publish episode",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("podcasts.publish_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -245,45 +245,42 @@ function CreateEpisodeDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button size="sm" />}>
         <PlusIcon />
-        New episode
+        {t("podcasts.new_episode")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Publish an episode</DialogTitle>
-          <DialogDescription>
-            Pick an audio file from the library; it becomes the episode&apos;s
-            audio.
-          </DialogDescription>
+          <DialogTitle>{t("podcasts.publish_title")}</DialogTitle>
+          <DialogDescription>{t("podcasts.publish_desc")}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="ep-title">Title</Label>
+            <Label htmlFor="ep-title">{t("podcasts.title_field")}</Label>
             <input
               id="ep-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Episode 1 — the launch mix"
+              placeholder={t("podcasts.title_placeholder")}
               className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="ep-desc">Description (optional)</Label>
+            <Label htmlFor="ep-desc">{t("podcasts.desc_field")}</Label>
             <input
               id="ep-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What this episode is about"
+              placeholder={t("podcasts.desc_placeholder")}
               className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Audio file</Label>
+            <Label>{t("podcasts.audio_file")}</Label>
             <div className="relative">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={q}
                 onChange={(e) => void search(e.target.value)}
-                placeholder="Search the library…"
+                placeholder={t("podcasts.search_library")}
                 className="h-9 w-full rounded-md border border-input bg-transparent pr-3 pl-8 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
             </div>
@@ -308,7 +305,7 @@ function CreateEpisodeDialog({
                   >
                     <span className="truncate">{f.title || f.filename}</span>
                     <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                      {f.artist || "unknown artist"}
+                      {f.artist || t("podcasts.unknown_artist")}
                     </span>
                   </button>
                 ))}
@@ -318,13 +315,13 @@ function CreateEpisodeDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             onClick={create}
             disabled={creating || !picked || !title.trim()}
           >
-            {creating ? "Publishing…" : "Publish"}
+            {creating ? t("podcasts.publishing") : t("podcasts.publish")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -343,20 +340,21 @@ function Shell({
   onLogout?: () => void;
   stationId: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2 font-semibold">
           <Radio className="size-5" />
-          Crabcast
+          {t("app.name")}
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" render={<Link to="/stations" />}>
-            Stations
+            {t("nav.stations")}
           </Button>
           {me?.isSuperAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           {me && (
@@ -365,10 +363,11 @@ function Shell({
                 {me.displayName}
               </span>
               <Button variant="ghost" size="sm" onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
@@ -380,7 +379,7 @@ function Shell({
           render={<Link to={`/stations/${stationId}`} />}
         >
           <ArrowLeftIcon />
-          Back to station
+          {t("podcasts.back_to_station")}
         </Button>
         {children}
       </main>

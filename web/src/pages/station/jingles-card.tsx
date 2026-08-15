@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BellRing, Play, Trash, Upload } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import {
 } from "@/lib/api";
 
 export function JinglesCard({ stationId }: { stationId: string }) {
+  const { t } = useTranslation();
   const [jingles, setJingles] = useState<Jingle[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -30,9 +32,9 @@ export function JinglesCard({ stationId }: { stationId: string }) {
     listJingles(stationId)
       .then(setJingles)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   useEffect(() => {
     reload();
@@ -46,15 +48,15 @@ export function JinglesCard({ stationId }: { stationId: string }) {
     try {
       const res = await uploadJingles(stationId, Array.from(files));
       toast.add({
-        title: `Uploaded ${res.uploaded.length} jingle(s)`,
+        title: t("jingles.uploaded", { count: res.uploaded.length }),
         type: "success",
         timeout: 3000,
       });
       reload();
     } catch (err) {
       toast.add({
-        title: "Upload failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("jingles.upload_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -68,14 +70,14 @@ export function JinglesCard({ stationId }: { stationId: string }) {
     try {
       await sendCommand(stationId, `jingles.play ${filename}`);
       toast.add({
-        title: `Jingle queued: ${filename}`,
+        title: t("jingles.queued", { filename }),
         type: "success",
         timeout: 3000,
       });
     } catch (err) {
       toast.add({
-        title: "Play failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("jingles.play_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -86,15 +88,15 @@ export function JinglesCard({ stationId }: { stationId: string }) {
     try {
       await deleteJingle(stationId, filename);
       toast.add({
-        title: `Deleted ${filename}`,
+        title: t("jingles.deleted", { filename }),
         type: "success",
         timeout: 3000,
       });
       reload();
     } catch (err) {
       toast.add({
-        title: "Delete failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("jingles.delete_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -107,7 +109,7 @@ export function JinglesCard({ stationId }: { stationId: string }) {
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2">
             <BellRing className="size-4" />
-            Jingles
+            {t("jingles.title")}
           </span>
           <div className="flex gap-1">
             <input
@@ -125,24 +127,18 @@ export function JinglesCard({ stationId }: { stationId: string }) {
               disabled={uploading}
             >
               <Upload />
-              {uploading ? "Uploading…" : "Upload"}
+              {uploading ? t("common.uploading") : t("jingles.upload")}
             </Button>
           </div>
         </CardTitle>
-        <CardDescription>
-          Audio files in the station jingles folder. Uploads re-scan the engine
-          so they are playable immediately; the header Play jingle button fires
-          a random one on air.
-        </CardDescription>
+        <CardDescription>{t("jingles.desc")}</CardDescription>
       </CardHeader>
       <CardContent>
         {error && <p className="text-sm text-destructive">{error}</p>}
         {jingles === null && !error ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : jingles && jingles.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No jingles yet — upload some to trigger on air.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("jingles.none")}</p>
         ) : (
           <ul className="divide-y">
             {jingles?.map((j) => (
@@ -171,7 +167,7 @@ export function JinglesCard({ stationId }: { stationId: string }) {
                     onClick={() => play(j.filename)}
                   >
                     <Play />
-                    On air
+                    {t("jingles.on_air")}
                   </Button>
                   <Button
                     variant="ghost"

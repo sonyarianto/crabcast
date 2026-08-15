@@ -321,7 +321,7 @@ install script; backup → restore verified in CI.
 - [x] HLS streaming as an alternative to raw mounts (AAC segments + hls.js;
       LL-HLS increment shipped: 2s segments + player low-latency mode).
 - [x] PWA admin + mobile remote control.
-- [ ] i18n: full translation pass (next-intl), RTL support.
+- [x] i18n: full translation pass (react-i18next for the Vite SPA), RTL-ready.
 - [ ] Built-in mount server (skip Icecast) — only after Phase 8/9 listener
       metrics justify the engine work; this is the biggest lever for the
       "better performance" claim but also the biggest risk, so it stays last.
@@ -866,6 +866,14 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   failed to boot — plain SQLite URLs are now normalized to
   `sqlite:file:…?mode=rwc` (regression-tested) in both the pool and the
   session store.
+
+- **Phase 11 — i18n pass** (2026-08-15): the Vite SPA now runs
+  react-i18next with 479 extracted strings across every page, shell and
+  toast; `en` (default) + `id` (Indonesian) shipped with full key parity,
+  browser-language detection, a persisted EN/ID toggle in every page
+  header, and `lang`/`dir` kept in sync on `<html>` (RTL-ready for future
+  locales). The remaining Phase 11 item is the built-in mount server,
+  deliberately last per the decision log.
 
 ---
 

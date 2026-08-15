@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useParams } from "react-router";
 import { ArrowLeftIcon, PlayIcon, SkipForwardIcon, Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +49,7 @@ type Loaded = {
 };
 
 export default function StationPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const id = params.id!;
 
@@ -74,7 +77,8 @@ export default function StationPage() {
           if (status.history.length) setHistory(status.history);
         })
         .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : "Unknown error";
+          const message =
+            err instanceof Error ? err.message : t("common.unknown_error");
           setError(message);
           if (!scheduleRetry) return;
           // A short backoff keeps the polling alive across engine restarts
@@ -83,7 +87,7 @@ export default function StationPage() {
           setTimeout(() => refreshRef.current(true), retryRef.current * 2000);
         });
     },
-    [id],
+    [id, t],
   );
 
   useEffect(() => {
@@ -100,7 +104,7 @@ export default function StationPage() {
         setError(null);
       })
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
 
     const interval = setInterval(() => refreshStatus(true), STATUS_POLL_MS);
@@ -134,21 +138,21 @@ export default function StationPage() {
       clearInterval(interval);
       events.close();
     };
-  }, [id, refreshStatus]);
+  }, [id, refreshStatus, t]);
 
   const run = async (command: string) => {
     try {
       await sendCommand(id, command);
       toast.add({
-        title: `Command sent: ${command}`,
+        title: t("station.command_sent", { command }),
         type: "success",
         timeout: 3000,
       });
       setTimeout(() => refreshStatus(true), 1500);
     } catch (err) {
       toast.add({
-        title: "Command failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("station.command_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -180,7 +184,7 @@ export default function StationPage() {
   if (!loaded) {
     return (
       <Shell {...shellProps}>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
       </Shell>
     );
   }
@@ -197,7 +201,7 @@ export default function StationPage() {
             className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeftIcon className="size-4" />
-            All stations
+            {t("station.all_stations")}
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">
             {station.name}
@@ -212,28 +216,28 @@ export default function StationPage() {
             size="sm"
             render={<Link to={`/stations/${station.id}/playlists`} />}
           >
-            Playlists
+            {t("station.playlists")}
           </Button>
           <Button
             variant="outline"
             size="sm"
             render={<Link to={`/stations/${station.id}/analytics`} />}
           >
-            Analytics
+            {t("station.analytics")}
           </Button>
           <Button
             variant="outline"
             size="sm"
             render={<Link to={`/stations/${station.id}/podcasts`} />}
           >
-            Podcasts
+            {t("station.podcasts")}
           </Button>
           <Button
             variant="outline"
             size="sm"
             render={<Link to={`/stations/${station.id}/public`} />}
           >
-            Public page
+            {t("station.public_page")}
           </Button>
           <ProfileDialog
             station={station}
@@ -250,7 +254,7 @@ export default function StationPage() {
             disabled={process !== "running"}
           >
             <SkipForwardIcon />
-            Skip
+            {t("station.skip")}
           </Button>
           <Button
             variant="outline"
@@ -259,17 +263,15 @@ export default function StationPage() {
             disabled={process !== "running"}
           >
             <PlayIcon />
-            Play jingle
+            {t("station.play_jingle")}
           </Button>
         </div>
       </div>
 
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle className="text-base">Live status</CardTitle>
-          <CardDescription>
-            Process supervision, engine control port, and the current track.
-          </CardDescription>
+          <CardTitle className="text-base">{t("station.live_status")}</CardTitle>
+          <CardDescription>{t("station.live_status_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
@@ -287,16 +289,16 @@ export default function StationPage() {
               {status?.live && (
                 <span className="text-destructive-foreground inline-flex animate-pulse items-center gap-1 rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold">
                   <span className="size-1.5 rounded-full bg-current" />
-                  LIVE — DJ on air, playlist ducked
+                  {t("station.live_badge")}
                 </span>
               )}
             </div>
             <div className="text-sm">
-              <span className="text-muted-foreground">pid </span>
+              <span className="text-muted-foreground">{t("station.pid_label")}</span>
               <span className="font-medium">{status?.pid ?? "—"}</span>
             </div>
             <div className="text-sm">
-              <span className="text-muted-foreground">engine uptime </span>
+              <span className="text-muted-foreground">{t("station.engine_uptime_label")}</span>
               <span className="font-medium">
                 {status?.engine_uptime_seconds != null
                   ? `${status.engine_uptime_seconds}s`
@@ -304,7 +306,7 @@ export default function StationPage() {
               </span>
             </div>
             <div className="text-sm">
-              <span className="text-muted-foreground">restarts </span>
+              <span className="text-muted-foreground">{t("station.restarts_label")}</span>
               <span className="font-medium">{status?.restarts ?? 0}</span>
             </div>
             {status?.last_error && (
@@ -314,9 +316,9 @@ export default function StationPage() {
             )}
           </div>
           <div className="mt-4 rounded-lg bg-muted/50 p-4">
-            <p className="text-xs text-muted-foreground">NOW PLAYING</p>
+            <p className="text-xs text-muted-foreground">{t("station.now_playing")}</p>
             <p className="mt-1 truncate font-medium">
-              {nowPlaying ?? "Idle — nothing playing"}
+              {nowPlaying ?? t("station.idle")}
             </p>
           </div>
         </CardContent>
@@ -332,20 +334,18 @@ export default function StationPage() {
 
       <Card className="mt-4">
         <CardHeader>
-          <CardTitle className="text-base">Recent history</CardTitle>
-          <CardDescription>
-            Tracks reported by the engine webhook.
-          </CardDescription>
+          <CardTitle className="text-base">{t("station.recent_history")}</CardTitle>
+          <CardDescription>{t("station.recent_history_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tracks yet.</p>
+            <p className="text-sm text-muted-foreground">{t("station.no_tracks")}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Started</TableHead>
+                  <TableHead>{t("station.history_title")}</TableHead>
+                  <TableHead>{t("station.history_started")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -377,6 +377,7 @@ function Shell({
   me?: { displayName: string; isSuperAdmin: boolean } | null;
   onLogout?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
@@ -387,14 +388,14 @@ function Shell({
         <div className="flex items-center gap-3">
           {me?.isSuperAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/library" />}>
-            Library
+            {t("nav.library")}
           </Button>
           <Button variant="ghost" size="sm" render={<Link to="/settings" />}>
-            Settings
+            {t("nav.settings")}
           </Button>
           {me && (
             <>
@@ -402,10 +403,11 @@ function Shell({
                 {me.displayName}
               </span>
               <Button variant="ghost" size="sm" onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>

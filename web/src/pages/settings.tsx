@@ -12,7 +12,9 @@ import {
   Trash2Icon,
   UploadIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +45,7 @@ import {
 import { useMe } from "@/lib/use-me";
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const { meState } = useMe();
   const [tokens, setTokens] = useState<ApiToken[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,14 +57,7 @@ export default function SettingsPage() {
 
   const restore = async (file: File | undefined) => {
     if (!file) return;
-    if (
-      !window.confirm(
-        "Restore replaces the database, media library and station configs " +
-          "with the backup. A safety copy of the current state is kept, but " +
-          "the service will restart. Continue?",
-      )
-    )
-      return;
+    if (!window.confirm(t("settings.confirm_restore"))) return;
     setRestoring(true);
     setRestoreNote(null);
     try {
@@ -69,8 +65,8 @@ export default function SettingsPage() {
       setRestoreNote(result.message);
     } catch (err) {
       toast.add({
-        title: "Restore failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("settings.restore_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 8000,
       });
@@ -83,9 +79,9 @@ export default function SettingsPage() {
     listTokens()
       .then(setTokens)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
-  }, []);
+  }, [t]);
 
   useEffect(reload, [reload]);
 
@@ -98,8 +94,8 @@ export default function SettingsPage() {
       setName("");
     } catch (err) {
       toast.add({
-        title: "Could not create token",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("settings.token_create_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -112,11 +108,11 @@ export default function SettingsPage() {
     try {
       await revokeToken(id);
       setTokens((prev) => prev?.filter((t) => t.id !== id) ?? null);
-      toast.add({ title: "Token revoked", type: "success", timeout: 3000 });
+      toast.add({ title: t("settings.token_revoked"), type: "success", timeout: 3000 });
     } catch (err) {
       toast.add({
-        title: "Could not revoke token",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("settings.token_revoke_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -126,7 +122,7 @@ export default function SettingsPage() {
   const copySecret = async () => {
     if (!newSecret) return;
     await navigator.clipboard.writeText(newSecret);
-    toast.add({ title: "Copied", type: "success", timeout: 2000 });
+    toast.add({ title: t("settings.copied"), type: "success", timeout: 2000 });
   };
 
   const shellProps = {
@@ -157,10 +153,10 @@ export default function SettingsPage() {
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <KeyRoundIcon className="size-6" />
-          Settings
+          {t("nav.settings")}
         </h1>
         <p className="text-sm text-muted-foreground">
-          API tokens authenticate third-party scripts and integrations via{" "}
+          {t("settings.subtitle_prefix")}{" "}
           <code className="rounded bg-muted px-1">Authorization: Bearer</code>.
         </p>
       </div>
@@ -168,13 +164,8 @@ export default function SettingsPage() {
       {newSecret && (
         <Card className="mb-4 border-primary/40">
           <CardHeader>
-            <CardTitle className="text-base">
-              Token created — copy it now
-            </CardTitle>
-            <CardDescription>
-              The secret is shown once and never stored; you won&apos;t be able
-              to see it again.
-            </CardDescription>
+            <CardTitle className="text-base">{t("settings.token_created")}</CardTitle>
+            <CardDescription>{t("settings.token_created_desc")}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
@@ -183,14 +174,14 @@ export default function SettingsPage() {
               </code>
               <Button variant="outline" size="sm" onClick={copySecret}>
                 <CopyIcon />
-                Copy
+                {t("settings.copy")}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setNewSecret(null)}
               >
-                Done
+                {t("settings.done")}
               </Button>
             </div>
           </CardContent>
@@ -200,12 +191,8 @@ export default function SettingsPage() {
       {meState.state === "ready" && meState.me.user.is_super_admin && (
         <Card className="mb-4">
           <CardHeader>
-            <CardTitle className="text-base">Backup &amp; restore</CardTitle>
-            <CardDescription>
-              A backup is a zip of the database, media library and station
-              configs. Restoring replaces them and restarts the service (the
-              current state is kept as a safety copy).
-            </CardDescription>
+            <CardTitle className="text-base">{t("settings.backup_title")}</CardTitle>
+            <CardDescription>{t("settings.backup_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -215,11 +202,11 @@ export default function SettingsPage() {
                 render={<a href={backupDownloadUrl()} />}
               >
                 <DownloadIcon />
-                Download backup
+                {t("settings.download_backup")}
               </Button>
               <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-input px-4 text-sm font-medium shadow-xs transition-colors outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring">
                 <UploadIcon />
-                {restoring ? "Restoring…" : "Restore from backup"}
+                {restoring ? t("settings.restoring") : t("settings.restore")}
                 <input
                   type="file"
                   accept=".zip"
@@ -235,7 +222,7 @@ export default function SettingsPage() {
             {restoreNote && (
               <p className="flex items-center gap-2 text-sm text-amber-500">
                 <ArchiveIcon className="size-4" />
-                {restoreNote} The page will reload once the service is back.
+                {restoreNote} {t("settings.restore_note_tail")}
               </p>
             )}
           </CardContent>
@@ -244,18 +231,15 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">My API tokens</CardTitle>
-          <CardDescription>
-            Tokens use your account&apos;s permissions; revoke one and it stops
-            working immediately.
-          </CardDescription>
+          <CardTitle className="text-base">{t("settings.tokens_title")}</CardTitle>
+          <CardDescription>{t("settings.tokens_desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-4 flex gap-2">
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Token name (e.g. ci-script)"
+              placeholder={t("settings.token_name_placeholder")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void create();
               }}
@@ -263,23 +247,21 @@ export default function SettingsPage() {
             />
             <Button onClick={create} disabled={creating || !name.trim()}>
               <PlusIcon />
-              Create token
+              {t("settings.create_token")}
             </Button>
           </div>
           {tokens === null ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
           ) : tokens.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No tokens yet — create one to use the REST API from scripts.
-            </p>
+            <p className="text-sm text-muted-foreground">{t("settings.no_tokens")}</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last used</TableHead>
-                  <TableHead className="text-right">Status</TableHead>
+                  <TableHead>{t("settings.col_name")}</TableHead>
+                  <TableHead>{t("settings.col_created")}</TableHead>
+                  <TableHead>{t("settings.col_last_used")}</TableHead>
+                  <TableHead className="text-right">{t("settings.col_status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -292,12 +274,12 @@ export default function SettingsPage() {
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {token.last_used_at
                         ? new Date(token.last_used_at).toLocaleString()
-                        : "never"}
+                        : t("settings.never")}
                     </TableCell>
                     <TableCell className="text-right">
                       {token.revoked_at ? (
                         <span className="text-xs text-muted-foreground">
-                          revoked
+                          {t("settings.revoked")}
                         </span>
                       ) : (
                         <Button
@@ -306,7 +288,7 @@ export default function SettingsPage() {
                           onClick={() => void revoke(token.id)}
                         >
                           <Trash2Icon />
-                          Revoke
+                          {t("settings.revoke")}
                         </Button>
                       )}
                     </TableCell>
@@ -330,24 +312,25 @@ function Shell({
   me?: { displayName: string; isSuperAdmin: boolean } | null;
   onLogout?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2 font-semibold">
           <Radio className="size-5" />
-          Crabcast
+          {t("app.name")}
         </div>
         <div className="flex items-center gap-3">
           {me?.isSuperAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/library" />}>
-            Library
+            {t("nav.library")}
           </Button>
           <Button variant="ghost" size="sm" render={<Link to="/stations" />}>
-            Stations
+            {t("nav.stations")}
           </Button>
           {me && (
             <>
@@ -355,10 +338,11 @@ function Shell({
                 {me.displayName}
               </span>
               <Button variant="ghost" size="sm" onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>

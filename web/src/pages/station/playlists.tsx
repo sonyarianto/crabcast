@@ -15,7 +15,9 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,14 +60,15 @@ import { useMe } from "@/lib/use-me";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-const KIND_LABELS: Record<PlaylistInput["kind"], string> = {
-  standard: "Standard (shuffle/sequential)",
-  looping: "Looping",
-  scheduled: "Scheduled (dayparted)",
-  once_per_hour: "Once per hour",
+const KIND_KEYS: Record<PlaylistInput["kind"], string> = {
+  standard: "playlists.kind_standard",
+  looping: "playlists.kind_looping",
+  scheduled: "playlists.kind_scheduled",
+  once_per_hour: "playlists.kind_once_per_hour",
 };
 
 export default function PlaylistsPage() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const stationId = params.id!;
 
@@ -78,9 +81,9 @@ export default function PlaylistsPage() {
     listPlaylists(stationId)
       .then(setPlaylists)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "Unknown error"),
+        setError(err instanceof Error ? err.message : t("common.unknown_error")),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   useEffect(reload, [reload]);
 
@@ -94,8 +97,8 @@ export default function PlaylistsPage() {
       setPreview(p.lua);
     } catch (err) {
       toast.add({
-        title: "Preview failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.preview_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -114,14 +117,14 @@ export default function PlaylistsPage() {
         <div className="flex items-center gap-3">
           {isAdmin && (
             <Button variant="ghost" size="sm" render={<Link to="/users" />}>
-              Users
+              {t("nav.users")}
             </Button>
           )}
           <Button variant="ghost" size="sm" render={<Link to="/stations" />}>
-            Stations
+            {t("nav.stations")}
           </Button>
           <Button variant="ghost" size="sm" render={<Link to="/library" />}>
-            Library
+            {t("nav.library")}
           </Button>
           {meState.state === "ready" && (
             <>
@@ -136,10 +139,11 @@ export default function PlaylistsPage() {
                   refresh();
                 }}
               >
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>
@@ -152,18 +156,16 @@ export default function PlaylistsPage() {
               className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
             >
               <ArrowLeftIcon className="size-4" />
-              Station
+              {t("playlists.back_link")}
             </Link>
-            <h1 className="text-2xl font-semibold tracking-tight">Playlists</h1>
-            <p className="text-sm text-muted-foreground">
-              Ordered track lists with fade/cue overrides, daypart schedules,
-              and per-playlist weights. Changes restart the engine
-              automatically.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {t("playlists.title")}
+            </h1>
+            <p className="text-sm text-muted-foreground">{t("playlists.subtitle")}</p>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={togglePreview}>
-              {preview !== null ? "Hide Lua" : "Preview Lua"}
+              {preview !== null ? t("playlists.hide_lua") : t("playlists.preview_lua")}
             </Button>
             <CreatePlaylistDialog stationId={stationId} onCreated={reload} />
           </div>
@@ -172,13 +174,8 @@ export default function PlaylistsPage() {
         {preview !== null && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="text-base">
-                Generated playlist source
-              </CardTitle>
-              <CardDescription>
-                What crabsoup runs for this station&apos;s playlists (the `pl`
-                source). Validate with `crabsoup --check` before applying.
-              </CardDescription>
+              <CardTitle className="text-base">{t("playlists.preview_title")}</CardTitle>
+              <CardDescription>{t("playlists.preview_desc")}</CardDescription>
             </CardHeader>
             <CardContent>
               <pre className="max-h-96 overflow-auto rounded-lg bg-muted/50 p-4 text-xs leading-relaxed">
@@ -191,17 +188,14 @@ export default function PlaylistsPage() {
         {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
 
         {playlists === null && !error && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
         )}
 
         {playlists !== null && playlists.length === 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>No playlists yet</CardTitle>
-              <CardDescription>
-                Create a playlist, then add tracks from the media library. With
-                no playlists, the station plays its playlist directory.
-              </CardDescription>
+              <CardTitle>{t("playlists.no_playlists")}</CardTitle>
+              <CardDescription>{t("playlists.no_playlists_desc")}</CardDescription>
             </CardHeader>
           </Card>
         )}
@@ -221,6 +215,7 @@ function CreatePlaylistDialog({
   stationId: string;
   onCreated: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<PlaylistInput>({
     name: "",
@@ -235,7 +230,7 @@ function CreatePlaylistDialog({
     setSaving(true);
     try {
       await createPlaylist(stationId, form);
-      toast.add({ title: "Playlist created", type: "success", timeout: 3000 });
+      toast.add({ title: t("playlists.created"), type: "success", timeout: 3000 });
       setOpen(false);
       setForm({
         name: "",
@@ -247,8 +242,8 @@ function CreatePlaylistDialog({
       onCreated();
     } catch (err) {
       toast.add({
-        title: "Failed to create playlist",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.create_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -261,19 +256,17 @@ function CreatePlaylistDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button />}>
         <PlusIcon />
-        New playlist
+        {t("playlists.new_playlist")}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New playlist</DialogTitle>
-          <DialogDescription>
-            Pick a type; scheduled playlists play only in their daypart windows.
-          </DialogDescription>
+          <DialogTitle>{t("playlists.new_playlist")}</DialogTitle>
+          <DialogDescription>{t("playlists.new_playlist_desc")}</DialogDescription>
         </DialogHeader>
         <PlaylistForm form={form} setForm={setForm} />
         <DialogFooter>
           <Button onClick={save} disabled={saving || !form.name.trim()}>
-            {saving ? "Creating…" : "Create playlist"}
+            {saving ? t("playlists.creating") : t("playlists.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -288,20 +281,21 @@ function PlaylistForm({
   form: PlaylistInput;
   setForm: (f: PlaylistInput) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
-        <Label htmlFor="pl-name">Name</Label>
+        <Label htmlFor="pl-name">{t("playlists.field_name")}</Label>
         <input
           id="pl-name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-          placeholder="Morning rotation"
+          placeholder={t("playlists.name_placeholder")}
           className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
       </div>
       <div className="grid gap-2">
-        <Label htmlFor="pl-kind">Type</Label>
+        <Label htmlFor="pl-kind">{t("playlists.field_type")}</Label>
         <select
           id="pl-kind"
           value={form.kind}
@@ -310,16 +304,16 @@ function PlaylistForm({
           }
           className="h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs outline-none"
         >
-          {(Object.keys(KIND_LABELS) as PlaylistInput["kind"][]).map((k) => (
+          {(Object.keys(KIND_KEYS) as PlaylistInput["kind"][]).map((k) => (
             <option key={k} value={k}>
-              {KIND_LABELS[k]}
+              {t(KIND_KEYS[k])}
             </option>
           ))}
         </select>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="pl-weight">Weight</Label>
+          <Label htmlFor="pl-weight">{t("playlists.field_weight")}</Label>
           <input
             id="pl-weight"
             type="number"
@@ -339,7 +333,7 @@ function PlaylistForm({
               onChange={(e) => setForm({ ...form, shuffle: e.target.checked })}
               disabled={form.kind === "looping"}
             />
-            Shuffle
+            {t("playlists.shuffle")}
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -347,7 +341,7 @@ function PlaylistForm({
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
             />
-            Enabled
+            {t("playlists.enabled")}
           </label>
         </div>
       </div>
@@ -362,6 +356,7 @@ function PlaylistCard({
   playlist: PlaylistDetail;
   onChange: () => void;
 }) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -372,8 +367,8 @@ function PlaylistCard({
       onChange();
     } catch (err) {
       toast.add({
-        title: "Operation failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.operation_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -385,12 +380,12 @@ function PlaylistCard({
     const target = index + dir;
     if (target < 0 || target >= order.length) return;
     [order[index], order[target]] = [order[target], order[index]];
-    await run(() => reorderPlaylistTracks(playlist.id, order), "Order updated");
+    await run(() => reorderPlaylistTracks(playlist.id, order), t("playlists.order_updated"));
   };
 
   const remove = async (mediaId: string) => {
-    if (!confirm(`Remove this track from "${playlist.name}"?`)) return;
-    await run(() => removePlaylistTrack(playlist.id, mediaId), "Track removed");
+    if (!confirm(t("playlists.confirm_remove_track", { name: playlist.name }))) return;
+    await run(() => removePlaylistTrack(playlist.id, mediaId), t("playlists.track_removed"));
   };
 
   const pl = playlist;
@@ -403,19 +398,21 @@ function PlaylistCard({
             <CardTitle className="flex items-center gap-2 text-base">
               {pl.name}
               <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                {KIND_LABELS[pl.kind]}
+                {t(KIND_KEYS[pl.kind])}
               </span>
               {!pl.enabled && (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
-                  disabled
+                  {t("common.disabled")}
                 </span>
               )}
             </CardTitle>
             <CardDescription>
-              {pl.tracks.length} track{pl.tracks.length === 1 ? "" : "s"} ·
-              weight {pl.weight}
+              {t("playlists.meta_tracks", {
+                count: pl.tracks.length,
+                weight: pl.weight,
+              })}
               {pl.kind === "scheduled" &&
-                ` · ${pl.schedules.length} schedule rule${pl.schedules.length === 1 ? "" : "s"}`}
+                t("playlists.meta_schedules", { count: pl.schedules.length })}
             </CardDescription>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -425,7 +422,7 @@ function PlaylistCard({
               onClick={() => setAddOpen(true)}
             >
               <PlusIcon />
-              Add tracks
+              {t("playlists.add_tracks")}
             </Button>
             <Button
               variant="outline"
@@ -433,15 +430,15 @@ function PlaylistCard({
               onClick={() => setEditing(true)}
             >
               <PencilIcon />
-              Edit
+              {t("playlists.edit")}
             </Button>
             <Button
               variant="ghost"
               size="sm"
               className="text-destructive hover:text-destructive"
               onClick={() => {
-                if (confirm(`Delete playlist "${pl.name}"?`))
-                  run(() => deletePlaylist(pl.id), "Playlist deleted");
+                if (confirm(t("playlists.confirm_delete", { name: pl.name })))
+                  run(() => deletePlaylist(pl.id), t("playlists.deleted"));
               }}
             >
               <Trash2Icon />
@@ -451,32 +448,30 @@ function PlaylistCard({
       </CardHeader>
       <CardContent className="space-y-4">
         {pl.tracks.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No tracks yet — add some from the media library.
-          </p>
+          <p className="text-sm text-muted-foreground">{t("playlists.no_tracks")}</p>
         ) : (
           <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr className="text-left">
-                  <th className="px-3 py-2 font-medium">#</th>
-                  <th className="px-3 py-2 font-medium">Track</th>
-                  <th className="px-3 py-2 font-medium">Overrides</th>
-                  <th className="px-3 py-2 text-right font-medium">Actions</th>
+                  <th className="px-3 py-2 font-medium">{t("playlists.col_hash")}</th>
+                  <th className="px-3 py-2 font-medium">{t("playlists.col_track")}</th>
+                  <th className="px-3 py-2 font-medium">{t("playlists.col_overrides")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("playlists.col_actions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {pl.tracks.map((t, i) => (
+                {pl.tracks.map((track, i) => (
                   <TrackRow
-                    key={t.media_id}
+                    key={track.media_id}
                     playlistId={pl.id}
                     index={i}
                     total={pl.tracks.length}
-                    track={t}
+                    track={track}
                     onMove={(dir) => move(i, dir)}
-                    onRemove={() => remove(t.media_id)}
+                    onRemove={() => remove(track.media_id)}
                     onSaved={() =>
-                      run(() => Promise.resolve(), "Overrides saved")
+                      run(() => Promise.resolve(), t("playlists.overrides_saved"))
                     }
                   />
                 ))}
@@ -525,6 +520,7 @@ function TrackRow({
   onRemove: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useTranslation();
   const [overrides, setOverrides] = useState({
     fade_in: track.fade_in ?? "",
     fade_out: track.fade_out ?? "",
@@ -555,7 +551,7 @@ function TrackRow({
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">fade in</span>
+          <span className="text-xs text-muted-foreground">{t("playlists.fade_in")}</span>
           <input
             value={String(overrides.fade_in)}
             onChange={(e) =>
@@ -565,7 +561,7 @@ function TrackRow({
             placeholder="—"
             className={inputClass}
           />
-          <span className="text-xs text-muted-foreground">out</span>
+          <span className="text-xs text-muted-foreground">{t("playlists.fade_out")}</span>
           <input
             value={String(overrides.fade_out)}
             onChange={(e) =>
@@ -575,7 +571,7 @@ function TrackRow({
             placeholder="—"
             className={inputClass}
           />
-          <span className="text-xs text-muted-foreground">cue in</span>
+          <span className="text-xs text-muted-foreground">{t("playlists.cue_in")}</span>
           <input
             value={String(overrides.cue_in)}
             onChange={(e) =>
@@ -585,7 +581,7 @@ function TrackRow({
             placeholder="—"
             className={inputClass}
           />
-          <span className="text-xs text-muted-foreground">out</span>
+          <span className="text-xs text-muted-foreground">{t("playlists.cue_out")}</span>
           <input
             value={String(overrides.cue_out)}
             onChange={(e) =>
@@ -631,6 +627,7 @@ function SchedulesSection({
   playlist: PlaylistDetail;
   onChange: () => void;
 }) {
+  const { t } = useTranslation();
   const [days, setDays] = useState<string[]>([]);
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("17:00");
@@ -643,12 +640,12 @@ function SchedulesSection({
         start_time: start,
         end_time: end,
       });
-      toast.add({ title: "Schedule added", type: "success", timeout: 3000 });
+      toast.add({ title: t("playlists.schedule_added"), type: "success", timeout: 3000 });
       onChange();
     } catch (err) {
       toast.add({
-        title: "Failed to add schedule",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.schedule_add_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -657,7 +654,7 @@ function SchedulesSection({
 
   const remove = async (scheduleId: string) => {
     await deletePlaylistSchedule(playlist.id, scheduleId);
-    toast.add({ title: "Schedule removed", type: "success", timeout: 3000 });
+    toast.add({ title: t("playlists.schedule_removed"), type: "success", timeout: 3000 });
     onChange();
   };
 
@@ -665,7 +662,7 @@ function SchedulesSection({
     <div className="rounded-lg border p-3">
       <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
         <ClockIcon className="size-4" />
-        Daypart rules
+        {t("playlists.daypart_rules")}
       </p>
       {playlist.schedules.length > 0 && (
         <ul className="mb-3 space-y-1 text-sm">
@@ -673,7 +670,7 @@ function SchedulesSection({
             <li key={s.id} className="flex items-center justify-between gap-2">
               <span>
                 <span className="font-medium">
-                  {s.days ? s.days.toUpperCase() : "every day"}
+                  {s.days ? s.days.toUpperCase() : t("playlists.every_day")}
                 </span>{" "}
                 · {s.start_time}–{s.end_time}
               </span>
@@ -721,7 +718,7 @@ function SchedulesSection({
           onChange={(e) => setStart(e.target.value)}
           className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
         />
-        <span className="text-xs text-muted-foreground">to</span>
+        <span className="text-xs text-muted-foreground">{t("playlists.to")}</span>
         <input
           type="time"
           value={end}
@@ -730,7 +727,7 @@ function SchedulesSection({
         />
         <Button variant="outline" size="sm" onClick={add}>
           <PlusIcon />
-          Add rule
+          {t("playlists.add_rule")}
         </Button>
       </div>
     </div>
@@ -750,6 +747,7 @@ function EditPlaylistDialog({
 }) {
   // Keyed by playlist id at the call site, so state initializes fresh per
   // playlist (no prop-sync effect needed).
+  const { t } = useTranslation();
   const [form, setForm] = useState<PlaylistInput>({
     name: playlist.name,
     kind: playlist.kind,
@@ -763,13 +761,13 @@ function EditPlaylistDialog({
     setSaving(true);
     try {
       await updatePlaylist(playlist.id, form);
-      toast.add({ title: "Playlist updated", type: "success", timeout: 3000 });
+      toast.add({ title: t("playlists.updated"), type: "success", timeout: 3000 });
       onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.add({
-        title: "Failed to update playlist",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.update_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -782,18 +780,16 @@ function EditPlaylistDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit playlist</DialogTitle>
-          <DialogDescription>
-            Changes restart the station engine with the new schedule.
-          </DialogDescription>
+          <DialogTitle>{t("playlists.edit_title")}</DialogTitle>
+          <DialogDescription>{t("playlists.edit_desc")}</DialogDescription>
         </DialogHeader>
         <PlaylistForm form={form} setForm={setForm} />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={save} disabled={saving || !form.name.trim()}>
-            {saving ? "Saving…" : "Save playlist"}
+            {saving ? t("playlists.saving") : t("playlists.save_playlist")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -812,6 +808,7 @@ function AddTracksDialog({
   onOpenChange: (open: boolean) => void;
   onAdded: () => void;
 }) {
+  const { t } = useTranslation();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<MediaFile[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -835,7 +832,7 @@ function AddTracksDialog({
     try {
       const { added } = await addPlaylistTracks(playlist.id, [...selected]);
       toast.add({
-        title: `Added ${added} track${added === 1 ? "" : "s"}`,
+        title: t("playlists.added_tracks", { count: added }),
         type: "success",
         timeout: 3000,
       });
@@ -844,8 +841,8 @@ function AddTracksDialog({
       onAdded();
     } catch (err) {
       toast.add({
-        title: "Failed to add tracks",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("playlists.add_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -860,17 +857,15 @@ function AddTracksDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add tracks to “{playlist.name}”</DialogTitle>
-          <DialogDescription>
-            Search the media library and pick tracks. Duplicates are skipped.
-          </DialogDescription>
+          <DialogTitle>{t("playlists.add_tracks_title", { name: playlist.name })}</DialogTitle>
+          <DialogDescription>{t("playlists.add_tracks_desc")}</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={q}
             onChange={(e) => search(e.target.value)}
-            placeholder="Search title, artist, album…"
+            placeholder={t("playlists.search_placeholder")}
             className="h-9 w-full rounded-md border border-input bg-transparent pr-3 pl-8 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
           />
         </div>
@@ -904,7 +899,7 @@ function AddTracksDialog({
                       {f.title}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {f.artist || "Unknown artist"}
+                      {f.artist || t("playlists.unknown_artist")}
                       {f.duration_seconds
                         ? ` · ${Math.floor(f.duration_seconds / 60)}:${String(
                             Math.floor(f.duration_seconds % 60),
@@ -918,16 +913,16 @@ function AddTracksDialog({
           </div>
         )}
         {searched && results.length === 0 && (
-          <p className="text-sm text-muted-foreground">No matches.</p>
+          <p className="text-sm text-muted-foreground">{t("playlists.no_matches")}</p>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button onClick={add} disabled={adding || selected.size === 0}>
             {adding
-              ? "Adding…"
-              : `Add ${selected.size || ""} track${selected.size === 1 ? "" : "s"}`}
+              ? t("playlists.adding")
+              : t("playlists.add_tracks_btn", { count: selected.size })}
           </Button>
         </DialogFooter>
       </DialogContent>

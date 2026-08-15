@@ -10,7 +10,9 @@ import {
   Radio,
   RocketIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { LanguageToggle } from "@/components/language-toggle";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +40,7 @@ import { useMe } from "@/lib/use-me";
 type Step = "station" | "media" | "playlist" | "done";
 
 export default function WelcomePage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { meState } = useMe();
   const [step, setStep] = useState<Step>("station");
@@ -71,7 +74,7 @@ export default function WelcomePage() {
   const createStationStep = async () => {
     if (!name.trim()) {
       toast.add({
-        title: "Station name required",
+        title: t("welcome.station_name_required"),
         type: "error",
         timeout: 4000,
       });
@@ -86,11 +89,11 @@ export default function WelcomePage() {
       });
       setStation(created);
       setStep("media");
-      toast.add({ title: "Station created", type: "success", timeout: 3000 });
+      toast.add({ title: t("welcome.station_created"), type: "success", timeout: 3000 });
     } catch (err) {
       toast.add({
-        title: "Could not create station",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("welcome.could_not_create_station"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -107,14 +110,14 @@ export default function WelcomePage() {
       setUploaded((prev) => [...prev, ...results]);
       const ok = results.filter((r) => r.status !== "error").length;
       toast.add({
-        title: `${ok} file${ok === 1 ? "" : "s"} added to the library`,
+        title: t("welcome.files_added", { count: ok }),
         type: ok > 0 ? "success" : "error",
         timeout: 4000,
       });
     } catch (err) {
       toast.add({
-        title: "Upload failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("welcome.upload_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -143,8 +146,8 @@ export default function WelcomePage() {
       setStep("done");
     } catch (err) {
       toast.add({
-        title: "Could not build the playlist",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("welcome.could_not_build_playlist"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -154,9 +157,9 @@ export default function WelcomePage() {
   };
 
   const steps: { key: Step; label: string }[] = [
-    { key: "station", label: "Station" },
-    { key: "media", label: "Media" },
-    { key: "playlist", label: "Go live" },
+    { key: "station", label: t("welcome.step_station") },
+    { key: "media", label: t("welcome.step_media") },
+    { key: "playlist", label: t("welcome.step_go_live") },
   ];
   const stepIndex = steps.findIndex((s) => s.key === step);
 
@@ -179,12 +182,9 @@ export default function WelcomePage() {
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
           <RocketIcon className="size-6" />
-          Welcome to Crabcast
+          {t("welcome.title")}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          Three steps to your first on-air station. You can change everything
-          later from the dashboard.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("welcome.subtitle")}</p>
       </div>
 
       <ol className="mb-6 flex items-center gap-2 text-sm">
@@ -222,35 +222,32 @@ export default function WelcomePage() {
       {step === "station" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">1 · Create your station</CardTitle>
-            <CardDescription>
-              The station engine (Crabsoup) will start right away; audio comes
-              next.
-            </CardDescription>
+            <CardTitle className="text-base">{t("welcome.step1_title")}</CardTitle>
+            <CardDescription>{t("welcome.step1_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="name">Station name</Label>
+              <Label htmlFor="name">{t("welcome.station_name")}</Label>
               <input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Harbour City Radio"
+                placeholder={t("welcome.station_name_placeholder")}
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="desc">Description (optional)</Label>
+              <Label htmlFor="desc">{t("welcome.description_optional")}</Label>
               <input
                 id="desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="What is your station about?"
+                placeholder={t("welcome.description_placeholder")}
                 className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
             <Button onClick={createStationStep} disabled={busy}>
-              Create station
+              {t("welcome.create_station")}
             </Button>
           </CardContent>
         </Card>
@@ -259,16 +256,13 @@ export default function WelcomePage() {
       {step === "media" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">2 · Add some music</CardTitle>
-            <CardDescription>
-              Upload a few tracks (mp3, ogg, flac, m4a…). They land in the
-              library and we will wire them into the playlist next.
-            </CardDescription>
+            <CardTitle className="text-base">{t("welcome.step2_title")}</CardTitle>
+            <CardDescription>{t("welcome.step2_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-input px-4 text-sm font-medium shadow-xs transition-colors outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring">
               <Music2Icon />
-              {busy ? "Uploading…" : "Choose audio files"}
+              {busy ? t("common.uploading") : t("welcome.choose_audio")}
               <input
                 type="file"
                 multiple
@@ -296,13 +290,13 @@ export default function WelcomePage() {
             )}
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("station")}>
-                Back
+                {t("common.back")}
               </Button>
               <Button
                 onClick={finishStep}
                 disabled={busy || uploaded.length === 0}
               >
-                Continue
+                {t("common.continue")}
               </Button>
             </div>
           </CardContent>
@@ -312,23 +306,21 @@ export default function WelcomePage() {
       {step === "playlist" && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">3 · Going live…</CardTitle>
-            <CardDescription>
-              Building the playlist and applying it to the engine.
-            </CardDescription>
+            <CardTitle className="text-base">{t("welcome.step3_title")}</CardTitle>
+            <CardDescription>{t("welcome.step3_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {busy && (
               <p className="animate-pulse text-sm text-muted-foreground">
-                Starting the engine with your music…
+                {t("welcome.step3_starting")}
               </p>
             )}
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("media")}>
-                Back
+                {t("common.back")}
               </Button>
               <Button onClick={finishStep} disabled={busy}>
-                Go live
+                {t("welcome.go_live")}
               </Button>
             </div>
           </CardContent>
@@ -340,16 +332,13 @@ export default function WelcomePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <PlayIcon className="size-5 text-emerald-500" />
-              {station.name} is live!
+              {t("welcome.live", { name: station.name })}
             </CardTitle>
-            <CardDescription>
-              The engine is streaming your music. From here you can tweak the
-              schedule, add live DJs, and open it to song requests.
-            </CardDescription>
+            <CardDescription>{t("welcome.live_desc")}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
             <Button render={<Link to={`/stations/${station.id}`} />}>
-              Open station dashboard
+              {t("welcome.open_dashboard")}
             </Button>
             <Button
               variant="outline"
@@ -357,7 +346,7 @@ export default function WelcomePage() {
                 <Link to={`/stations/${station.id}/public`} target="_blank" />
               }
             >
-              View public page
+              {t("welcome.view_public")}
             </Button>
           </CardContent>
         </Card>
@@ -375,6 +364,7 @@ function Shell({
   me?: { displayName: string } | null;
   onLogout?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col">
       <header className="flex h-14 items-center justify-between border-b px-4">
@@ -384,7 +374,7 @@ function Shell({
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" render={<Link to="/stations" />}>
-            Stations
+            {t("nav.stations")}
           </Button>
           {me && (
             <>
@@ -392,10 +382,11 @@ function Shell({
                 {me.displayName}
               </span>
               <Button variant="ghost" size="sm" onClick={onLogout}>
-                Log out
+                {t("nav.logout")}
               </Button>
             </>
           )}
+          <LanguageToggle />
           <ThemeToggle />
         </div>
       </header>

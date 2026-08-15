@@ -6,6 +6,7 @@ import { PwaRegister } from "@/components/pwa-register";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import "./globals.css";
+import "@/lib/i18n";
 
 import Home from "@/pages/home";
 import Library from "@/pages/library";

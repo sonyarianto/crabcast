@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Pencil } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +35,7 @@ export function ProfileDialog({
   station: Station;
   onSaved: (updated: Station) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Profile>({
     name: station.name,
@@ -63,7 +65,7 @@ export function ProfileDialog({
 
   const save = async () => {
     if (!form.name.trim()) {
-      toast.add({ title: "Name is required", type: "error", timeout: 4000 });
+      toast.add({ title: t("streamers.name_required"), type: "error", timeout: 4000 });
       return;
     }
     setSaving(true);
@@ -82,14 +84,14 @@ export function ProfileDialog({
       onSaved(updated);
       setOpen(false);
       toast.add({
-        title: "Station profile saved",
+        title: t("profile.saved"),
         type: "success",
         timeout: 3000,
       });
     } catch (err) {
       toast.add({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("requests.save_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -105,19 +107,17 @@ export function ProfileDialog({
     <>
       <Button variant="outline" size="sm" onClick={openDialog}>
         <Pencil />
-        Edit profile
+        {t("profile.edit")}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Station profile</DialogTitle>
-            <DialogDescription>
-              Name, description and public-page social links.
-            </DialogDescription>
+            <DialogTitle>{t("profile.title")}</DialogTitle>
+            <DialogDescription>{t("profile.desc")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="pf-name">Name</Label>
+              <Label htmlFor="pf-name">{t("streamers.name")}</Label>
               <input
                 id="pf-name"
                 value={form.name}
@@ -126,7 +126,7 @@ export function ProfileDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pf-desc">Description</Label>
+              <Label htmlFor="pf-desc">{t("streamers.description")}</Label>
               <textarea
                 id="pf-desc"
                 value={form.description}
@@ -139,10 +139,10 @@ export function ProfileDialog({
             </div>
             {(
               [
-                ["website", "Website"],
-                ["facebook", "Facebook"],
-                ["twitter", "X / Twitter"],
-                ["instagram", "Instagram"],
+                ["website", t("profile.website")],
+                ["facebook", t("profile.facebook")],
+                ["twitter", t("profile.twitter")],
+                ["instagram", t("profile.instagram")],
               ] as const
             ).map(([key, label]) => (
               <div className="grid gap-2" key={key}>
@@ -166,11 +166,11 @@ export function ProfileDialog({
                   }
                   className="size-4 accent-[#7c3aed]"
                 />
-                HLS streaming
+                {t("profile.hls")}
               </label>
               {form.hls_enabled && (
                 <div className="grid gap-2">
-                  <Label htmlFor="pf-hls-dir">HLS directory</Label>
+                  <Label htmlFor="pf-hls-dir">{t("profile.hls_dir")}</Label>
                   <input
                     id="pf-hls-dir"
                     value={form.hls_dir}
@@ -181,9 +181,7 @@ export function ProfileDialog({
                     className={input}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Writable server path for MPEG-TS segments (created
-                    automatically). The public page and widget then play the HLS
-                    stream instead of the raw mount.
+                    {t("profile.hls_hint")}
                   </p>
                 </div>
               )}
@@ -191,10 +189,10 @@ export function ProfileDialog({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={save} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("profile.saving") : t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

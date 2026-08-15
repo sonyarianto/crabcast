@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { Radio } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { StationPlayer } from "@/components/station-player";
 import { getPublicStation, type PublicStation } from "@/lib/api";
@@ -10,6 +11,7 @@ import { getPublicStation, type PublicStation } from "@/lib/api";
 const POLL_MS = 10_000;
 
 export default function StationWidget() {
+  const { t } = useTranslation();
   const params = useParams<{ id: string }>();
   const stationId = params.id!;
 
@@ -45,7 +47,7 @@ export default function StationWidget() {
         />
       </div>
       <p className="my-2 truncate text-center text-sm font-medium">
-        {station?.now?.title ?? "Off air"}
+        {station?.now?.title ?? t("public.off_air")}
       </p>
       {station && (
         <StationPlayer

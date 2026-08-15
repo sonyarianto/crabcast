@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Inbox, ListOrdered, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +30,7 @@ import {
 type RulesForm = Omit<RequestRules, "station_id">;
 
 export function RequestsCard({ stationId }: { stationId: string }) {
+  const { t } = useTranslation();
   const [rules, setRules] = useState<RulesForm | null>(null);
   const [pending, setPending] = useState<RequestEntry[]>([]);
   const [recent, setRecent] = useState<RequestEntry[]>([]);
@@ -55,9 +57,9 @@ export function RequestsCard({ stationId }: { stationId: string }) {
     getEngineQueue(stationId)
       .then(setQueue)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : "engine unreachable"),
+        setError(err instanceof Error ? err.message : t("requests.engine_unreachable")),
       );
-  }, [stationId]);
+  }, [stationId, t]);
 
   useEffect(() => {
     reload();
@@ -68,15 +70,15 @@ export function RequestsCard({ stationId }: { stationId: string }) {
     try {
       await updateRequestRules(stationId, rules);
       toast.add({
-        title: "Request rules saved",
+        title: t("requests.rules_saved"),
         type: "success",
         timeout: 3000,
       });
       reload();
     } catch (err) {
       toast.add({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("requests.save_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -88,15 +90,18 @@ export function RequestsCard({ stationId }: { stationId: string }) {
       if (action === "approve") await approveRequest(stationId, r.id);
       else await rejectRequest(stationId, r.id);
       toast.add({
-        title: `Request ${action === "approve" ? "approved" : "rejected"}`,
+        title:
+          action === "approve"
+            ? t("requests.approved")
+            : t("requests.rejected"),
         type: "success",
         timeout: 3000,
       });
       reload();
     } catch (err) {
       toast.add({
-        title: "Action failed",
-        description: err instanceof Error ? err.message : "Unknown error",
+        title: t("requests.action_failed"),
+        description: err instanceof Error ? err.message : t("common.unknown_error"),
         type: "error",
         timeout: 6000,
       });
@@ -108,12 +113,9 @@ export function RequestsCard({ stationId }: { stationId: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <ListOrdered className="size-4" />
-          Requests
+          {t("requests.title")}
         </CardTitle>
-        <CardDescription>
-          Listener requests push to the engine request queue and preempt the
-          playlist. Configure rules, moderate, and control the queue.
-        </CardDescription>
+        <CardDescription>{t("requests.desc")}</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-6">
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -123,7 +125,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
           <div className="grid gap-3">
             <div className="flex items-center justify-between">
               <Label htmlFor="rq-enabled" className="text-sm">
-                Accept listener requests
+                {t("requests.accept")}
               </Label>
               <input
                 id="rq-enabled"
@@ -136,7 +138,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label htmlFor="rq-max">Max requests per hour</Label>
+                <Label htmlFor="rq-max">{t("requests.max_per_hour")}</Label>
                 <input
                   id="rq-max"
                   type="number"
@@ -160,7 +162,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                       setRules({ ...rules, dedupe: e.target.checked })
                     }
                   />
-                  Reject duplicates
+                  {t("requests.dedupe")}
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -170,13 +172,13 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                       setRules({ ...rules, moderation: e.target.checked })
                     }
                   />
-                  Require approval
+                  {t("requests.require_approval")}
                 </label>
               </div>
             </div>
             <div>
               <Button size="sm" onClick={saveRules}>
-                Save rules
+                {t("requests.save_rules")}
               </Button>
             </div>
           </div>
@@ -186,10 +188,10 @@ export function RequestsCard({ stationId }: { stationId: string }) {
         <div className="grid gap-2">
           <p className="flex items-center gap-1 text-sm font-medium">
             <Inbox className="size-4" />
-            Pending approval
+            {t("requests.pending")}
           </p>
           {pending.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing pending.</p>
+            <p className="text-sm text-muted-foreground">{t("requests.nothing_pending")}</p>
           ) : (
             <ul className="divide-y">
               {pending.map((r) => (
@@ -215,7 +217,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                   <div className="flex shrink-0 gap-1">
                     <Button size="sm" onClick={() => decide(r, "approve")}>
                       <Check />
-                      Approve
+                      {t("requests.approve")}
                     </Button>
                     <Button
                       size="sm"
@@ -224,7 +226,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                       onClick={() => decide(r, "reject")}
                     >
                       <X />
-                      Reject
+                      {t("requests.reject")}
                     </Button>
                   </div>
                 </li>
@@ -238,7 +240,7 @@ export function RequestsCard({ stationId }: { stationId: string }) {
           <div className="flex items-center justify-between">
             <p className="flex items-center gap-1 text-sm font-medium">
               <ListOrdered className="size-4" />
-              Engine queue ({queue.length})
+              {t("requests.engine_queue", { count: queue.length })}
             </p>
             <div className="flex gap-1">
               <Button
@@ -249,23 +251,23 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                   try {
                     await clearEngineQueue(stationId);
                     toast.add({
-                      title: "Queue cleared",
+                      title: t("requests.queue_cleared"),
                       type: "success",
                       timeout: 3000,
                     });
                     reload();
                   } catch (err) {
                     toast.add({
-                      title: "Clear failed",
+                      title: t("requests.clear_failed"),
                       description:
-                        err instanceof Error ? err.message : "Unknown error",
+                        err instanceof Error ? err.message : t("common.unknown_error"),
                       type: "error",
                       timeout: 6000,
                     });
                   }
                 }}
               >
-                Clear
+                {t("requests.clear")}
               </Button>
               <Button
                 size="sm"
@@ -275,28 +277,28 @@ export function RequestsCard({ stationId }: { stationId: string }) {
                   try {
                     await skipEngineQueue(stationId);
                     toast.add({
-                      title: "Queue skipped",
+                      title: t("requests.queue_skipped"),
                       type: "success",
                       timeout: 3000,
                     });
                     reload();
                   } catch (err) {
                     toast.add({
-                      title: "Skip failed",
+                      title: t("requests.skip_failed"),
                       description:
-                        err instanceof Error ? err.message : "Unknown error",
+                        err instanceof Error ? err.message : t("common.unknown_error"),
                       type: "error",
                       timeout: 6000,
                     });
                   }
                 }}
               >
-                Skip current
+                {t("requests.skip_current")}
               </Button>
             </div>
           </div>
           {queue.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Queue is empty.</p>
+            <p className="text-sm text-muted-foreground">{t("requests.queue_empty")}</p>
           ) : (
             <ul className="max-h-40 divide-y overflow-auto rounded-md border">
               {queue.map((item) => (
@@ -314,9 +316,9 @@ export function RequestsCard({ stationId }: { stationId: string }) {
 
         {/* Recent history */}
         <div className="grid gap-2">
-          <p className="text-sm font-medium">Recent requests</p>
+          <p className="text-sm font-medium">{t("requests.recent")}</p>
           {recent.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No requests yet.</p>
+            <p className="text-sm text-muted-foreground">{t("requests.none")}</p>
           ) : (
             <ul className="divide-y">
               {recent.slice(0, 10).map((r) => (
