@@ -118,6 +118,16 @@ All mutations from the web UI send the session CSRF token in
 | GET | `/api/alerts?station_id=&open=` | Alert feed (global view: super admin) |
 | POST | `/api/alerts/{id}/resolve` | Resolve (station manager) |
 
+### Podcasts
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET/POST | `/api/stations/{station_id}/podcasts` | List / publish an episode (station manager) |
+| DELETE | `/api/podcasts/{episode_id}` | Delete an episode |
+
+Episode audio references a media-library file (`media_id`); the public
+RSS feed is rendered from the same table.
+
 ### Admin
 
 | Method | Path | Notes |
@@ -137,6 +147,7 @@ Used by the public page, the embeddable widget, and third-party clients:
 | GET | `/api/public/stations/{station_id}` | Brand, socials, requests flag, stream URL |
 | GET | `/api/public/stations/{station_id}/library?q=` | Lightweight search for the request form |
 | POST | `/api/stations/{station_id}/requests` | Anonymous listener request |
+| GET | `/api/public/stations/{station_id}/podcast.rss` | RSS 2.0 podcast feed (episodes, enclosure) |
 
 ```sh
 curl $API/api/now-playing

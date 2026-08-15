@@ -223,6 +223,13 @@ export default function StationPage() {
           <Button
             variant="outline"
             size="sm"
+            render={<Link href={`/stations/${station.id}/podcasts`} />}
+          >
+            Podcasts
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             render={<Link href={`/stations/${station.id}/public`} />}
           >
             Public page

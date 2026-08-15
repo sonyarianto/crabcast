@@ -955,6 +955,45 @@ export function historyCsvUrl(stationId: string, days: number): string {
   return `/api/stations/${stationId}/analytics/history.csv?days=${days}`;
 }
 
+export type PodcastEpisode = {
+  id: string;
+  station_id: string;
+  media_id: string;
+  title: string;
+  description: string;
+  created_at: string;
+};
+
+export async function listPodcasts(
+  stationId: string,
+  signal?: AbortSignal,
+): Promise<PodcastEpisode[]> {
+  return request<PodcastEpisode[]>(
+    `/api/stations/${stationId}/podcasts`,
+    undefined,
+    signal,
+  );
+}
+
+export async function createPodcastEpisode(
+  stationId: string,
+  input: { media_id: string; title: string; description?: string },
+): Promise<PodcastEpisode> {
+  return request<PodcastEpisode>(`/api/stations/${stationId}/podcasts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deletePodcastEpisode(id: string): Promise<void> {
+  await request<never>(`/api/podcasts/${id}`, { method: "DELETE" });
+}
+
+export function podcastRssUrl(stationId: string): string {
+  return `/api/public/stations/${stationId}/podcast.rss`;
+}
+
 export type ApiToken = {
   id: string;
   user_id: string;

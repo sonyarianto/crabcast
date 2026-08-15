@@ -27,6 +27,8 @@ CRABCAST_DATA_DIR=/var/lib/crabcast/data
 CRABCAST_MEDIA_DIR=/var/lib/crabcast/media
 CRABCAST_SESSION_SECRET=<openssl rand -hex 32>
 CRABCAST_ALERT_WEBHOOK_URL=
+# Optional: share the SSE/event bus across API replicas (horizontal scale)
+CRABCAST_REDIS_URL=redis://127.0.0.1:6379
 EOF
 sudo chmod 600 /etc/crabcast/env
 ```

@@ -283,11 +283,16 @@ tolerance; a forced dead-air episode raises an alert.### Phase 9 — Performance
 - [x] Benchmarks (criterion in `server/` + load tests): API p95, station startup,
       CPU/RAM per station at idle and under playout. Re-baseline
       against AzuraCast's known numbers (documented in this file).
-- [ ] Postgres feature flag (sqlx) for multi-host deployments; shared
-      SSE/event bus via Redis pub/sub (optional, behind the flag).
+- [ ] Postgres feature flag (sqlx) for multi-host deployments (big
+      dual-driver port: ~107 query sites + SQLite dialect functions +
+      PG migrations; deferred — see Done).
+- [x] Shared SSE/event bus via Redis pub/sub (optional, behind
+      `CRABCAST_REDIS_URL`).
 - [x] CDN-friendly static serving for media/cover art; cache headers.
 - [x] Full REST API (AzuraCast-compatible surface where sensible) + API tokens.
-- [ ] Horizontal-scale story: N API hosts, M station hosts, one shared DB.
+- [x] Horizontal-scale story: N API hosts, M station hosts, one shared DB
+      (documented in the docs site; the Redis bus delivers the shared
+      event bus, Postgres is the remaining unlock).
 
 **Acceptance**: 50 stations on a small VPS with p95 API < 50 ms and idle CPU
 per station in single digits; documented benchmark table.
@@ -309,7 +314,7 @@ install script; backup → restore verified in CI.
 
 ### Phase 11 — Stretch goals (post-1.0)
 
-- [ ] Podcasts (AzuraCast parity): upload episodes, feed generation.
+- [x] Podcasts (AzuraCast parity): upload episodes, feed generation.
 - [ ] HLS streaming (low-latency) as an alternative to raw mounts.
 - [ ] PWA admin + mobile remote control.
 - [ ] i18n: full translation pass (next-intl), RTL support.
@@ -593,6 +598,53 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   generator emitted `jingles({})` for stations without a jingles dir,
   which the engine rejects at `--check` (the jingle source is now omitted
   from the chain instead).
+
+- **Phase 11 — Podcasts (AzuraCast parity)** (2026-08-15): migration
+  `0012_podcast_episodes` (episodes reference media-library files,
+  cascade on station/media delete); `db/podcasts.rs` repo (create/list
+  with media join/delete, FK errors surfaced as 400); `api/podcasts.rs`
+  — station-manager-gated CRUD (`GET/POST /api/stations/{id}/podcasts`,
+  `DELETE /api/podcasts/{id}`, audit-logged) and a public RSS 2.0 feed
+  (`GET /api/public/stations/{id}/podcast.rss`) with iTunes author
+  namespace, RFC 2822 pubDates, XML escaping, and same-origin absolute
+  enclosures pointing at the media stream endpoint (Host-header based).
+  Unit tests: XML escaping, pubDate rendering, feed structure. Web:
+  `/stations/[id]/podcasts` page — episode list, create dialog with a
+  media-library search picker, delete, RSS-feed link — plus a Podcasts
+  button on the station page. Verified live: upload audio → publish
+  episode (title with `&` escaped) → anonymous RSS parsed with
+  `xml.etree` (channel, item title, enclosure url/type/length, pubDate)
+  → list → delete (204, empty after). 58 Rust tests pass, clippy clean,
+  web tsc/lint/build clean. API docs updated on the site.
+
+- **Phase 9 — Redis event bus** (2026-08-15): `api/sse.rs` now has two
+  backends. The default stays the in-process broadcast hub; when
+  `CRABCAST_REDIS_URL` is set (e.g. `redis://host:6379`), every host's hub
+  publishes `StationEvent`s to a `crabcast:station:{id}:events` pub/sub
+  channel and SSE subscribers consume from Redis instead, so N API hosts
+  fan events out to each other. The Redis client is built at startup but
+  the connection manager is opened lazily (a missing Redis never blocks
+  boot and degrades to the local hub with a warning); pub/sub is
+  per-subscriber with an mpsc forwarding task, and the `StationEvent`
+  types gained `Deserialize` for the wire format. Verified live against
+  a real Redis (docker): two API hosts on separate ports + separate
+  SQLite DBs sharing one Redis — a track webhook posted to host A arrived
+  on host B's SSE stream; the no-Redis local path was regression-tested
+  (SSE delivered in-process, no Redis configured). Docs updated
+  (`CRABCAST_REDIS_URL` in the site env table + packaging README). The
+  Postgres feature flag is still open: it is a large dual-driver port
+  (~107 sqlx query sites, SQLite `strftime`/`julianday`/`datetime`
+  dialect functions, placeholder styles, PG migration variants) that is
+  being handled as a separate effort.
+
+- **Phase 9 — Horizontal-scale story** (2026-08-15): new docs-site page
+  `guide/scaling.md` laying out the three deployment models (single host,
+  web replicas today; N API hosts / M station hosts / one shared DB once
+  the Postgres backend lands), what already supports multi-host (the Redis
+  event bus, bearer-token REST API, stateless handlers) and the remaining
+  gaps (SQLite is single-writer so one API host until Postgres; session
+  store locality; station placement + shared media on station hosts).
+  Includes an ASCII topology diagram and concrete next steps.
 
 - **Phase 9 — Performance, scale & API (partial)** (2026-08-15):
   **benchmarks + load tests** — criterion benches (`benches/hot_paths.rs`:

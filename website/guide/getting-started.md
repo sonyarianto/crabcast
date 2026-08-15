@@ -63,6 +63,18 @@ create the initial admin account (email-less, argon2-hashed).
 | `CRABCAST_WEBHOOK_URL` | `http://localhost:8080/api/webhooks/track` | Engine track-change webhook |
 | `CRABCAST_ALERT_WEBHOOK_URL` | — | Optional outbound alert webhook (raise/resolve events) |
 | `CRABCAST_RETENTION_DAYS` | `30` | Analytics retention: listener samples, history, resolved alerts |
+| `CRABCAST_REDIS_URL` | — | Optional Redis URL (`redis://host:6379`): share the station event/SSE bus across API hosts |
+
+## Multiple API hosts (horizontal scale)
+
+By default each API process fans out station events (SSE) through an
+in-process hub, so only the host that handled a track webhook knows about
+it. Set `CRABCAST_REDIS_URL` on every API host and the hub publishes to a
+Redis pub/sub channel per station instead — a track change reported to one
+host reaches every dashboard connected to any other host. This is the
+piece that lets you run several API replicas in front of one shared
+database; sessions stay per-host unless you also put the session store on
+Redis or Postgres.
 
 ## Backups
 

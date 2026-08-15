@@ -41,7 +41,10 @@ export default defineConfig({
         },
         {
           text: 'Reference',
-          items: [{ text: 'REST API & tokens', link: '/guide/api' }],
+          items: [
+            { text: 'REST API & tokens', link: '/guide/api' },
+            { text: 'Scaling & multi-host', link: '/guide/scaling' },
+          ],
         },
       ],
     },

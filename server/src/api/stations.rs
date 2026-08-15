@@ -15,7 +15,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::json;
 use tokio_stream::StreamExt;
-use tokio_stream::wrappers::BroadcastStream;
 
 use crate::api::AppState;
 use crate::api::error::{ApiError, ApiResult};
@@ -231,10 +230,7 @@ async fn station_events(
         })),
     };
 
-    let stream = BroadcastStream::new(rx).filter_map(move |res| match res {
-        Ok(ev) => Some(Ok::<_, axum::Error>(Event::default().data(sse_frame(&ev)))),
-        Err(_) => None,
-    });
+    let stream = rx.map(|ev| Ok::<_, axum::Error>(Event::default().data(sse_frame(&ev))));
 
     Ok((
         StatusCode::OK,

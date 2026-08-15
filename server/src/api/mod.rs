@@ -6,6 +6,7 @@ pub mod health;
 pub mod jingles;
 pub mod media;
 pub mod playlists;
+pub mod podcasts;
 pub mod public;
 pub mod requests;
 pub mod sse;
@@ -49,6 +50,7 @@ pub fn router(pool: SqlitePool, supervisor: Supervisor, storage: Arc<dyn Storage
         .merge(stations::routes())
         .merge(media::routes())
         .merge(playlists::routes())
+        .merge(podcasts::routes())
         .merge(streamers::routes())
         .merge(tokens::routes())
         .merge(requests::routes())
