@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { Radio } from "lucide-react";
 
+import { StationPlayer } from "@/components/station-player";
 import { getPublicStation, type PublicStation } from "@/lib/api";
 
 const POLL_MS = 10_000;
@@ -47,7 +48,10 @@ export default function StationWidget() {
         {station?.now?.title ?? "Off air"}
       </p>
       {station && (
-        <audio src={station.stream_url} controls className="w-full" />
+        <StationPlayer
+          streamUrl={station.stream_url}
+          hlsPlaylistUrl={station.hls_playlist_url}
+        />
       )}
     </div>
   );

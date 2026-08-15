@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { Link2, Radio } from "lucide-react";
 
+import { StationPlayer } from "@/components/station-player";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import {
@@ -153,7 +154,10 @@ export default function PublicStationPage() {
           <p className="mb-4 truncate text-lg font-semibold">
             {station.now?.title ?? "Off air — check back soon"}
           </p>
-          <audio src={station.stream_url} controls className="w-full" />
+          <StationPlayer
+            streamUrl={station.stream_url}
+            hlsPlaylistUrl={station.hls_playlist_url}
+          />
         </div>
 
         {/* Request form */}

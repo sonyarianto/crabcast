@@ -37,6 +37,11 @@ pub struct Station {
     pub icecast_source_user: String,
     pub icecast_source_password: String,
 
+    pub hls_enabled: bool,
+    pub hls_dir: String,
+    pub hls_segment_seconds: f64,
+    pub hls_retention: i64,
+
     pub website: String,
     pub facebook: String,
     pub twitter: String,
@@ -88,6 +93,15 @@ pub struct StationInput {
     pub icecast_source_user: String,
     #[serde(default = "default_icecast_source_password")]
     pub icecast_source_password: String,
+
+    #[serde(default)]
+    pub hls_enabled: bool,
+    #[serde(default)]
+    pub hls_dir: String,
+    #[serde(default = "default_hls_segment_seconds")]
+    pub hls_segment_seconds: f64,
+    #[serde(default = "default_hls_retention")]
+    pub hls_retention: i64,
 
     #[serde(default)]
     pub website: String,
@@ -154,13 +168,20 @@ fn default_icecast_source_user() -> String {
 fn default_icecast_source_password() -> String {
     "hackme".into()
 }
+fn default_hls_segment_seconds() -> f64 {
+    5.0
+}
+fn default_hls_retention() -> i64 {
+    12
+}
 
 const COLUMNS: &str = "id, name, description, created_at, sample_rate, channels, \
 frames_per_buffer, crossfade_seconds, fade_curve, duck_seconds, playlist_dir, \
 jingles_dir, harbor_port, harbor_mount, harbor_password, control_port, \
 control_http_port, icecast_host, icecast_port, icecast_mount, icecast_format, \
-icecast_bitrate, icecast_source_user, icecast_source_password, website, facebook, \
-twitter, instagram";
+icecast_bitrate, icecast_source_user, icecast_source_password, hls_enabled, \
+hls_dir, hls_segment_seconds, hls_retention, website, facebook, twitter, \
+instagram";
 
 pub async fn list(pool: &SqlitePool) -> Result<Vec<Station>, ApiError> {
     Ok(
@@ -185,9 +206,10 @@ pub async fn create(pool: &SqlitePool, input: &StationInput) -> Result<Station, 
 frames_per_buffer, crossfade_seconds, fade_curve, duck_seconds, playlist_dir, \
 jingles_dir, harbor_port, harbor_mount, harbor_password, control_port, \
 control_http_port, icecast_host, icecast_port, icecast_mount, icecast_format, \
-icecast_bitrate, icecast_source_user, icecast_source_password, website, facebook, \
-twitter, instagram) \
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+icecast_bitrate, icecast_source_user, icecast_source_password, hls_enabled, \
+hls_dir, hls_segment_seconds, hls_retention, website, facebook, twitter, \
+instagram) \
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&input.name)
@@ -212,6 +234,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
     .bind(input.icecast_bitrate)
     .bind(&input.icecast_source_user)
     .bind(&input.icecast_source_password)
+    .bind(input.hls_enabled)
+    .bind(&input.hls_dir)
+    .bind(input.hls_segment_seconds)
+    .bind(input.hls_retention)
     .bind(&input.website)
     .bind(&input.facebook)
     .bind(&input.twitter)
@@ -233,6 +259,7 @@ duck_seconds = ?, playlist_dir = ?, jingles_dir = ?, harbor_port = ?, \
 harbor_mount = ?, harbor_password = ?, control_port = ?, control_http_port = ?, \
 icecast_host = ?, icecast_port = ?, icecast_mount = ?, icecast_format = ?, \
 icecast_bitrate = ?, icecast_source_user = ?, icecast_source_password = ?, \
+hls_enabled = ?, hls_dir = ?, hls_segment_seconds = ?, hls_retention = ?, \
 website = ?, facebook = ?, twitter = ?, instagram = ?, \
 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     )
@@ -258,6 +285,10 @@ updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?",
     .bind(input.icecast_bitrate)
     .bind(&input.icecast_source_user)
     .bind(&input.icecast_source_password)
+    .bind(input.hls_enabled)
+    .bind(&input.hls_dir)
+    .bind(input.hls_segment_seconds)
+    .bind(input.hls_retention)
     .bind(&input.website)
     .bind(&input.facebook)
     .bind(&input.twitter)

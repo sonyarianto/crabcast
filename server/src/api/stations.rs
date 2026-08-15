@@ -72,6 +72,7 @@ async fn create_station(
     if !user.can_create_stations() {
         return Err(forbidden("station_manager permission required"));
     }
+    validate_hls(&input)?;
     let station = stations::create(&state.pool, &input).await?;
     // A failed engine start (bad config, missing binary) must not leave the
     // station half-created in the DB; the apply error is returned.
@@ -99,6 +100,7 @@ async fn update_station(
             "station_manager permission required for this station",
         ));
     }
+    validate_hls(&input)?;
     let station = stations::update(&state.pool, &id, &input).await?;
     // Atomic config swap: kill + respawn the engine with the new script.
     state.supervisor.apply(&station).await?;
@@ -111,6 +113,18 @@ async fn update_station(
     )
     .await?;
     Ok(Json(station))
+}
+
+/// HLS needs a writable directory to slice segments into; the engine's
+/// `--check` rejects `output.hls` without one, so fail early instead of
+/// leaving the station in a broken config.
+fn validate_hls(input: &StationInput) -> ApiResult<()> {
+    if input.hls_enabled && input.hls_dir.trim().is_empty() {
+        return Err(ApiError::bad_request(
+            "hls_dir is required when HLS is enabled",
+        ));
+    }
+    Ok(())
 }
 
 async fn delete_station(

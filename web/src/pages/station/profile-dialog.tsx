@@ -23,6 +23,8 @@ type Profile = {
   facebook: string;
   twitter: string;
   instagram: string;
+  hls_enabled: boolean;
+  hls_dir: string;
 };
 
 export function ProfileDialog({
@@ -40,6 +42,8 @@ export function ProfileDialog({
     facebook: station.facebook,
     twitter: station.twitter,
     instagram: station.instagram,
+    hls_enabled: station.hls_enabled,
+    hls_dir: station.hls_dir,
   });
   const [saving, setSaving] = useState(false);
 
@@ -51,6 +55,8 @@ export function ProfileDialog({
       facebook: station.facebook,
       twitter: station.twitter,
       instagram: station.instagram,
+      hls_enabled: station.hls_enabled,
+      hls_dir: station.hls_dir,
     });
     setOpen(true);
   };
@@ -70,6 +76,8 @@ export function ProfileDialog({
         facebook: form.facebook,
         twitter: form.twitter,
         instagram: form.instagram,
+        hls_enabled: form.hls_enabled,
+        hls_dir: form.hls_dir.trim(),
       });
       onSaved(updated);
       setOpen(false);
@@ -148,6 +156,38 @@ export function ProfileDialog({
                 />
               </div>
             ))}
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.hls_enabled}
+                  onChange={(e) =>
+                    setForm({ ...form, hls_enabled: e.target.checked })
+                  }
+                  className="size-4 accent-[#7c3aed]"
+                />
+                HLS streaming
+              </label>
+              {form.hls_enabled && (
+                <div className="grid gap-2">
+                  <Label htmlFor="pf-hls-dir">HLS directory</Label>
+                  <input
+                    id="pf-hls-dir"
+                    value={form.hls_dir}
+                    onChange={(e) =>
+                      setForm({ ...form, hls_dir: e.target.value })
+                    }
+                    placeholder="/srv/hls/my-station"
+                    className={input}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Writable server path for MPEG-TS segments (created
+                    automatically). The public page and widget then play the HLS
+                    stream instead of the raw mount.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>

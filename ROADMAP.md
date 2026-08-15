@@ -315,7 +315,7 @@ install script; backup → restore verified in CI.
 ### Phase 11 — Stretch goals (post-1.0)
 
 - [x] Podcasts (AzuraCast parity): upload episodes, feed generation.
-- [ ] HLS streaming (low-latency) as an alternative to raw mounts.
+- [x] HLS streaming as an alternative to raw mounts (AAC segments + hls.js; LL-HLS later).
 - [x] PWA admin + mobile remote control.
 - [ ] i18n: full translation pass (next-intl), RTL support.
 - [ ] Built-in mount server (skip Icecast) — only after Phase 8/9 listener
@@ -639,6 +639,28 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   sw.js + icons + manifest, dev proxy + nginx route shapes checked. Docs
   (AGENTS.md, README, architecture/scaling/getting-started/api site pages)
   updated to the new stack.
+
+- **Phase 11 — HLS streaming** (2026-08-15): stations can publish an HLS
+  stream alongside Icecast. Migration `0013_station_hls` adds
+  `hls_enabled`/`hls_dir`/`hls_segment_seconds`/`hls_retention`; the Lua
+  generator binds a single `tap = on_metadata(air, ...)` source shared by
+  `output.icecast` and — when enabled — `output.hls({directory, ...})`
+  (the engine's shared-root check requires every output to reference the
+  same source, and one tap keeps the metadata webhook firing once). The
+  engine slices AAC into `seg-*.ts` + `playlist.m3u8` under the station's
+  dir (created on connect, stale files cleared). Public payload gains
+  `hls_playlist_url`, and `GET /api/public/stations/{id}/hls/{*file}`
+  serves the files same-origin with correct content types
+  (`application/vnd.apple.mpegurl` / `video/mp2t`), a `..`/absolute-path
+  sandbox (400), and 404 when HLS is disabled; enabling HLS with an empty
+  dir is rejected 400. Web: shared `StationPlayer` component (native HLS
+  on Safari/iOS, lazy-loaded hls.js elsewhere, raw-mount fallback) used by
+  the public page and the embeddable widget; the station profile dialog
+  gains the HLS toggle + directory field. Verified live against the real
+  engine: segments written and rolling (EXTM3U + `#EXT-X-MEDIA-SEQUENCE`,
+  AAC 44100 stereo), playlist + segment served with the right content
+  types, traversal rejected, disable → 404, empty dir → 400. 59 Rust
+  tests, clippy clean, web tsc/lint/build clean.
 
 - **Phase 11 — Podcasts (AzuraCast parity)** (2026-08-15): migration
   `0012_podcast_episodes` (episodes reference media-library files,

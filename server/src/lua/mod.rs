@@ -118,9 +118,17 @@ pub fn render(
         format!("{blank_webhook_url}?station={}", station.id),
     );
     let _ = writeln!(s);
+    // One shared tap: every output must reference the same root source (the
+    // engine rejects outputs with different roots), and on_metadata must
+    // fire once per track change no matter how many outputs consume it.
     let _ = writeln!(
         s,
-        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, on_metadata(air, function(m) http_post({:?}, m) end))",
+        "tap = on_metadata(air, function(m) http_post({:?}, m) end)",
+        format!("{webhook_url}?station={}", station.id),
+    );
+    let _ = writeln!(
+        s,
+        "output.icecast({{host = {:?}, port = {}, mount = {:?}, format = {:?}, bitrate = {}, source_user = {:?}, source_password = {:?}, name = {:?}, description = {:?}, genre = \"Various\", reconnect = 5}}, tap)",
         station.icecast_host,
         station.icecast_port,
         station.icecast_mount,
@@ -130,8 +138,18 @@ pub fn render(
         station.icecast_source_password,
         station.name,
         station.description,
-        format!("{webhook_url}?station={}", station.id),
     );
+    if station.hls_enabled {
+        // A second tap of the same root source: the engine slices AAC into
+        // MPEG-TS segments under the station's HLS dir (created on connect,
+        // stale files cleared). The public page serves them from
+        // /api/public/stations/{id}/hls/.
+        let _ = writeln!(
+            s,
+            "output.hls({{directory = {:?}, segment_seconds = {}, retention = {}}}, tap)",
+            station.hls_dir, station.hls_segment_seconds, station.hls_retention,
+        );
+    }
     let _ = writeln!(s);
     s
 }
@@ -362,6 +380,10 @@ mod tests {
             icecast_bitrate: 128000,
             icecast_source_user: "source".into(),
             icecast_source_password: "hackme".into(),
+            hls_enabled: false,
+            hls_dir: String::new(),
+            hls_segment_seconds: 5.0,
+            hls_retention: 12,
             website: String::new(),
             facebook: String::new(),
             twitter: String::new(),
@@ -429,6 +451,44 @@ mod tests {
             s.contains("on_metadata(air, function(m) http_post("),
             "on_metadata must sit above blank.detect: {s}"
         );
+    }
+
+    #[test]
+    fn hls_output_emitted_only_when_enabled() {
+        let mut st = station();
+        let off = render(
+            &st,
+            "http://localhost:8080/api/webhooks/track",
+            "http://localhost:8080/api/webhooks/blank",
+            &[],
+            &[],
+        );
+        assert!(!off.contains("output.hls"), "no HLS line expected:\n{off}");
+
+        st.hls_enabled = true;
+        st.hls_dir = "/srv/hls/test-radio".into();
+        st.hls_segment_seconds = 4.0;
+        st.hls_retention = 20;
+        let on = render(
+            &st,
+            "http://localhost:8080/api/webhooks/track",
+            "http://localhost:8080/api/webhooks/blank",
+            &[],
+            &[],
+        );
+        assert!(
+            on.contains(
+                "output.hls({directory = \"/srv/hls/test-radio\", segment_seconds = 4, retention = 20}, tap)"
+            ),
+            "{on}"
+        );
+        // The HLS tap must sit on the same root source as icecast (the
+        // shared on_metadata tap), so the engine's shared-root check passes.
+        assert!(
+            on.contains("tap = on_metadata(air, function(m) http_post("),
+            "{on}"
+        );
+        assert!(on.contains("output.icecast("), "{on}");
     }
 
     #[test]

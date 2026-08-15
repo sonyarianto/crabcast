@@ -144,8 +144,9 @@ Used by the public page, the embeddable widget, and third-party clients:
 | --- | --- | --- |
 | GET | `/api/now-playing` | Every station with now playing + history |
 | GET | `/api/station/{id}/now-playing` | Single station (same payload) |
-| GET | `/api/public/stations/{station_id}` | Brand, socials, requests flag, stream URL |
+| GET | `/api/public/stations/{station_id}` | Brand, socials, requests flag, stream URL, `hls_playlist_url` (when enabled) |
 | GET | `/api/public/stations/{station_id}/library?q=` | Lightweight search for the request form |
+| GET | `/api/public/stations/{station_id}/hls/{file}` | HLS playlist/segment files (`.m3u8`, `seg-*.ts`), path-sandboxed |
 | POST | `/api/stations/{station_id}/requests` | Anonymous listener request |
 | GET | `/api/public/stations/{station_id}/podcast.rss` | RSS 2.0 podcast feed (episodes, enclosure) |
 

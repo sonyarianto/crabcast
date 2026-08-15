@@ -29,6 +29,10 @@ export type Station = {
   icecast_bitrate: number;
   icecast_source_user: string;
   icecast_source_password: string;
+  hls_enabled: boolean;
+  hls_dir: string;
+  hls_segment_seconds: number;
+  hls_retention: number;
   website: string;
   facebook: string;
   twitter: string;
@@ -58,6 +62,10 @@ export type StationInput = {
   icecast_bitrate?: number;
   icecast_source_user?: string;
   icecast_source_password?: string;
+  hls_enabled?: boolean;
+  hls_dir?: string;
+  hls_segment_seconds?: number;
+  hls_retention?: number;
   website?: string;
   facebook?: string;
   twitter?: string;
@@ -605,6 +613,8 @@ export type PublicStation = {
   instagram: string;
   requests_enabled: boolean;
   stream_url: string;
+  /** Playlist URL when the station has HLS enabled, else null. */
+  hls_playlist_url: string | null;
   now: SongHistory | null;
   history: SongHistory[];
 };
