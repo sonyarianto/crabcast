@@ -301,7 +301,7 @@ per station in single digits; documented benchmark table.
 - [ ] Backup/restore (DB + media + station configs) from the admin UI.
 - [ ] Onboarding wizard: first-run admin, create first station, add media,
       go live in < 5 minutes.
-- [ ] Docs site (mirror Crabsoup's VitePress site pattern): getting started,
+- [x] Docs site (mirror Crabsoup's VitePress site pattern): getting started,
       station guide, engine reference, API reference.
 
 **Acceptance**: fresh VPS → on-air station in under 10 minutes from the
@@ -580,6 +580,16 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   token create → `Authorization: Bearer` 200 on `/api/stations`, revoked
   token 401, bad bearer 401, anonymous 401, `/api/now-playing` 200, load
   test p95 numbers above.
+
+- **Docs site** (2026-08-15): VitePress site in `website/` (mirrors the
+  Crabsoup site pattern) — home page with feature grid, getting-started
+  guide (quickstart, first station, env vars), radio-operation guide
+  (stations/playlists/streamers, requests & jingles), monitoring guide
+  (analytics & alerts), full REST API reference incl. Bearer tokens and the
+  public surface, and an architecture page. `website/vercel.json` pins the
+  vitepress framework preset for Vercel (Root Directory = `website`);
+  deploy steps in `website/README.md`. Verified: `npm run build` produces a
+  clean static site with no dead links.
 
 - **Phase 8 — Analytics & monitoring** (2026-08-15): `listener_samples`
   (per-minute, polled from the Icecast admin API with a reachability flag)
