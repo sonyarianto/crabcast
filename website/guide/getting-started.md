@@ -3,7 +3,7 @@
 Crabcast is an AzuraCast-style web radio management platform: a **Rust** API
 server that supervises one [Crabsoup](https://github.com/sonyarianto/crabsoup)
 engine process per station, broadcasting to **Icecast**. The admin UI is a
-Next.js 16 app that talks to the API only (no direct DB access).
+Vite + React SPA that talks to the API only (no direct DB access).
 
 ## Requirements
 

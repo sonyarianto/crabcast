@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Crabcast',
   description:
-    'AzuraCast-style web radio management — multi-station, playlist automation, live DJ, requests, analytics. Rust + Crabsoup + Next.js.',
+    'AzuraCast-style web radio management — multi-station, playlist automation, live DJ, requests, analytics. Rust + Crabsoup + Vite/React.',
   lang: 'en-US',
   cleanUrls: true,
   // website/README.md is repo-facing (dev + Vercel deploy steps), not a

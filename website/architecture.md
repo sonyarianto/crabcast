@@ -2,9 +2,9 @@
 
 ```
 ┌─────────────────────────── crabcast ───────────────────────────┐
-│  web/ (Next.js 16, Tailwind v4, shadcn/ui)                      │
+│  web/ (Vite + React SPA, Tailwind v4, shadcn/ui)                │
 │    admin UI · public pages · embeddable player widget           │
-│        │  REST + SSE (Rust API proxy via Next rewrites)         │
+│        │  REST + SSE (proxied /api: dev vite proxy, prod nginx) │
 │  server/ (Rust, axum + tokio + sqlx)                            │
 │    api/            REST routes + SSE hub                        │
 │    auth/           sessions, roles, permissions, API tokens     │
@@ -24,8 +24,9 @@
 ## Design rules
 
 - **The Rust API is the single source of truth.** The web app never touches
-  the DB; everything goes through `/api/*`, proxied by Next rewrites. No
-  CORS headaches, one auth model.
+  the DB; everything goes through `/api/*` with relative paths — a dev
+  proxy in `web/vite.config.ts` and nginx in production forward `/api` to
+  the API. One auth model.
 - **One engine process per station.** The supervisor generates
   `crabsoup.lua` from the DB, validates it with `crabsoup --check`, then
   spawns/restarts the engine with exponential backoff. Config changes are
@@ -67,7 +68,7 @@ binary. Integration points:
 
 ```
 server/          Rust API (axum, SQLite, migrations, benches)
-web/             Next.js 16 app (admin, public pages, widget)
+web/             Vite + React SPA (admin, public pages, widget)
 website/         This documentation site (VitePress)
 docker/          Dockerfiles + compose.yml (server + web + icecast)
 scripts/         load-test.sh, bench-station.sh

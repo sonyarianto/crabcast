@@ -617,6 +617,29 @@ listener-series query (7 d of per-minute samples, 60-min buckets) ≈ 7.4 ms.
   `sw.js`, both icons, the maskable + apple icons, the manifest and the
   app shell all HTTP 200.
 
+- **Web framework — Next.js → Vite + React SPA** (2026-08-15): the web
+  app was already a client-side SPA in practice (every page `"use client"`,
+  all data through `web/lib/api.ts` → `/api/*`), so it moved to **Vite 7 +
+  React + TypeScript + Tailwind v4 + shadcn/ui + react-router**. The
+  migration: `app/` → `src/pages/` (route table in `src/main.tsx`,
+  `BrowserRouter`), `components/`/`lib/` → `src/`, `next/link` →
+  react-router `Link` (`href` → `to`), `next/navigation` `useRouter` →
+  `useNavigate` (`replace: true`) and `useParams` (`params.id!`), and the
+  Next `metadata`/manifest moved to `index.html` meta tags +
+  `public/manifest.webmanifest`. Dev proxy (`/api` → `API_UPSTREAM`) now
+  lives in `vite.config.ts`; the production image is a static build served
+  by **nginx** (`docker/Dockerfile.web` + `nginx.conf.template` with
+  envsubst `proxy_pass ${API_UPSTREAM}` and SPA fallback); the bare-metal
+  systemd unit now runs a zero-dependency Node static server
+  (`web/serve.mjs`). Also fixed: circular `--font-sans` var in
+  `globals.css` (Geist now loaded from Google Fonts), stale
+  `eslint.config.mjs`/`postcss.config.mjs` removed, prettier points at
+  `src/globals.css`, `npm run typecheck` replaces `tsc --noEmit`. Verified:
+  tsc/lint/build/prettier all green, dist serves the SPA shell + assets +
+  sw.js + icons + manifest, dev proxy + nginx route shapes checked. Docs
+  (AGENTS.md, README, architecture/scaling/getting-started/api site pages)
+  updated to the new stack.
+
 - **Phase 11 — Podcasts (AzuraCast parity)** (2026-08-15): migration
   `0012_podcast_episodes` (episodes reference media-library files,
   cascade on station/media delete); `db/podcasts.rs` repo (create/list

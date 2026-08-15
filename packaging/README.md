@@ -33,14 +33,20 @@ EOF
 sudo chmod 600 /etc/crabcast/env
 ```
 
-## 3. Build the web app (standalone)
+## 3. Build the web app (static SPA)
 
 ```sh
 npm ci --prefix web && npm run build --prefix web
-sudo mkdir -p /opt/crabcast
-sudo cp -r web /opt/crabcast/web        # includes .next/standalone
+sudo mkdir -p /opt/crabcast/web
+sudo cp -r web/dist /opt/crabcast/web/dist
+sudo install -m 0644 web/serve.mjs /opt/crabcast/web/serve.mjs
 sudo chown -R crabcast:crabcast /opt/crabcast
 ```
+
+The web app is a static SPA (Vite build). `serve.mjs` is a dependency-free
+Node server with SPA fallback and an `/api` reverse proxy (built-ins only,
+no node_modules needed at runtime); nginx can serve it instead if you
+prefer — see `docker/nginx.conf.template` for the config shape.
 
 ## 4. Install the units
 

@@ -1,9 +1,20 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# web/ — Vite + React SPA
 
-# This is NOT the Next.js you know
+The admin app, public station pages, and embeddable player widget. It is a
+client-rendered SPA: no SSR, all data comes from `src/lib/api.ts` against
+`/api/*` (relative paths — dev proxy in `vite.config.ts`, nginx in prod).
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- **Stack**: Vite 7, React 19, TypeScript, Tailwind CSS v4, shadcn/ui
+  (Base UI variant) under `src/components/ui/`, react-router v8.
+- **Routes**: the whole route table lives in `src/main.tsx`; pages under
+  `src/pages/` (station pages in `src/pages/station/`).
+- **Commands**: `npm run dev` (port 3000, proxies `/api` to
+  `API_UPSTREAM`), `npm run typecheck`, `npm run lint`, `npm run build`
+  (→ `dist/`), `npm run check` (prettier).
+- **PWA**: `public/manifest.webmanifest`, icons, and `public/sw.js`; the
+  worker is registered in production only (`src/components/pwa-register.tsx`).
+- **Bare-metal serving**: `serve.mjs` (Node built-ins only, SPA fallback +
+  `/api` proxy) backs `packaging/crabcast-web.service`; Docker uses nginx
+  (`../docker/nginx.conf.template`).
+- Keep the API layer as the single source of truth — never fetch the DB
+  directly from components.

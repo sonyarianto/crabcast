@@ -11,8 +11,9 @@ deployment models, what works today, and what unlocks the next tier.
   engine** (`crabsoup`) process per station.
 - **Station engines**: one `crabsoup` per station, spawned by the API
   process on the same host, streaming to Icecast.
-- **Web app** (Next.js): stateless; calls the API through rewrites. Scale
-  it freely behind a load balancer — it holds no state of its own.
+- **Web app** (Vite + React SPA): stateless static files; calls the API
+  through a `/api` proxy (vite dev proxy / nginx). Scale it freely behind
+  a load balancer — it holds no state of its own.
 - **Event bus**: station events (track changes for the SSE dashboards) fan
   out through an in-process hub by default, or through **Redis pub/sub**
   when `CRABCAST_REDIS_URL` is set on every API host.

@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web — Crabcast admin SPA
 
-## Getting Started
+Vite + React + TypeScript + Tailwind CSS v4 + shadcn/ui. The web app is a
+client-side SPA: every page calls the Rust API (`/api/*`) through
+`src/lib/api.ts`; there is no server-side rendering.
 
-First, run the development server:
+## Commands
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```sh
+npm run dev        # Vite dev server on :3000, proxies /api to API_UPSTREAM
+npm run typecheck  # tsc -b (noEmit)
+npm run lint       # eslint (flat config)
+npm run build      # tsc -b && vite build → dist/
+npm run preview    # serve the built dist/ (vite preview)
+npm run serve      # node serve.mjs (bare-metal static server + /api proxy)
+npm run check      # prettier --check
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+src/main.tsx        router + providers (theme, PWA registration)
+src/pages/          route components (station/* for /stations/:id/...)
+src/components/     shared + shadcn/ui components
+src/lib/            api client (api.ts), auth hook (use-me.ts), utils
+public/             static assets: icons, manifest.webmanifest, sw.js
+vite.config.ts      dev proxy for /api, @ → src alias
+serve.mjs           dependency-free static server (systemd bare-metal)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Production: static build in `dist/`, served by nginx in Docker
+(`../docker/Dockerfile.web`) or `serve.mjs` on bare metal
+(`../packaging/crabcast-web.service`).

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Crabcast
   text: Web radio management for the self-hosted
-  tagline: Multi-station, playlist automation, live DJs, listener requests, jingles, analytics — a Rust API plus the Crabsoup engine, with a modern Next.js admin.
+  tagline: Multi-station, playlist automation, live DJs, listener requests, jingles, analytics — a Rust API plus the Crabsoup engine, with a modern Vite + React admin.
   actions:
     - theme: brand
       text: Get started

@@ -1,8 +1,8 @@
 # REST API & tokens
 
 The Rust API is the single source of truth. The web app talks to it through
-Next rewrites (`/api/*` → `API_UPSTREAM`); third-party clients can hit the
-API directly.
+an `/api` proxy (dev: `web/vite.config.ts`; prod: nginx), both forwarding to
+`API_UPSTREAM`; third-party clients can hit the API directly.
 
 - Base URL: `http://<host>:8080` (or the proxied origin in production).
 - Errors: non-2xx responses carry `{"error": "..."}`.

@@ -14,41 +14,41 @@ cargo test --manifest-path server/Cargo.toml
 cargo run --manifest-path server/Cargo.toml            # dev API on :8080
 
 # Web (web/)
-npm --prefix web run dev        # dev app on :3000
+npm --prefix web run dev        # Vite dev app on :3000 (proxies /api to :8080)
+npm --prefix web run typecheck  # tsc -b
 npm --prefix web run lint
-npm --prefix web run build
-npx tsc --noEmit                # (from web/)
+npm --prefix web run build      # tsc -b && vite build -> dist/
 
 # Full stack
 make dev                        # docker compose: server + web + icecast
 ```
 
 CI runs: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
-`cargo test`, `npx tsc --noEmit`, `npm run lint`, `npm run build`.
+`cargo test`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
 ## Conventions
 
 - **Rust API is the single source of truth.** The web app never touches the
-  DB; it calls `/api/*`, proxied through Next rewrites
-  (`web/next.config.ts`, upstream from `API_UPSTREAM`, default
-  `http://localhost:8080`).
+  DB; it calls `/api/*` with relative paths. In dev, `web/vite.config.ts`
+  proxies `/api` to `API_UPSTREAM` (default `http://localhost:8080`); in
+  production nginx does the same.
 - Server modules mirror the roadmap layout: `api/`, `auth/`, `stations/`,
   `lua/`, `control/`, `media/`, `analytics/`, `db/`. New phases add modules
   there.
 - SQLite via sqlx; migrations live in `server/migrations/`, run at boot.
   Always add a migration for schema changes.
 - Web uses shadcn/ui (Base UI variant) — reuse existing components under
-  `web/components/ui/`; don't hand-roll widgets.
+  `web/src/components/ui/`; don't hand-roll widgets.
 - No comments unless they explain *why*; no secrets in code or in generated
   `crabsoup.lua`.
 - Phases land as working features with tests, and the ROADMAP checklist is
   updated in the same commit.
 
-## Next.js 16 note
+## Web app note
 
-`web/` runs Next.js 16 with breaking changes vs older versions. Read the
-bundled docs in `web/node_modules/next/dist/docs/` before writing Next code;
-`web/AGENTS.md` has more detail.
+`web/` is a Vite + React SPA (TypeScript, Tailwind v4, shadcn/ui, react-router).
+No SSR: all data flows through the client-side API layer (`web/src/lib/api.ts`)
+against `/api/*` — keep it that way.
 
 ## Engine
 

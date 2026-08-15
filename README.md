@@ -3,8 +3,8 @@
 An AzuraCast-style web radio management platform — multi-station, playlist
 automation, live DJ support, listener requests, analytics, and beautiful
 admin/public UIs — built on a **Rust** backend and the
-[Crabsoup](https://github.com/) streaming engine, with a **Next.js 16** +
-**Tailwind CSS v4** + **shadcn/ui** frontend.
+[Crabsoup](https://github.com/) streaming engine, with a **Vite + React**
+**SPA** (TypeScript, Tailwind CSS v4, shadcn/ui) frontend.
 
 See [ROADMAP.md](ROADMAP.md) for the full plan and current phase.
 
@@ -15,7 +15,7 @@ See [ROADMAP.md](ROADMAP.md) for the full plan and current phase.
 | Engine | Crabsoup (Rust) |
 | Backend | Rust, axum + tokio + sqlx |
 | DB | SQLite (Postgres later) |
-| Frontend | Next.js 16 (App Router, Turbopack), Tailwind v4, shadcn/ui |
+| Frontend | Vite + React SPA, Tailwind v4, shadcn/ui, react-router |
 | Streaming | Icecast (initially) |
 
 ## Quickstart
@@ -51,14 +51,15 @@ make fmt    # cargo fmt + prettier
 
 ```
 server/   Rust API (axum, SQLite, migrations)
-web/      Next.js 16 app (admin, public pages, player widget)
+web/      Vite + React SPA (admin, public pages, player widget)
 docker/   Dockerfiles + compose.yml
 ```
 
 ## Conventions
 
 - The Rust API is the single source of truth; the web app talks to it via
-  Next rewrites (`/api/*`), never directly to the DB.
+  `/api/*` (dev proxy in `vite.config.ts`, nginx in prod), never directly
+  to the DB.
 - `cargo fmt`/`clippy -D warnings` must stay clean; CI enforces it.
 - Every station config change is validated with `crabsoup --check` before
   apply (Phase 1+).

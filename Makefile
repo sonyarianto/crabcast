@@ -12,7 +12,7 @@ logs: ## Tail logs from all services
 server: ## Run the Rust API locally (needs DATABASE_URL/BIND_ADDR env)
 	cargo run --manifest-path server/Cargo.toml
 
-web: ## Run the Next.js app locally
+web: ## Run the Vite app locally (needs the API on :8080)
 	npm --prefix web run dev
 
 build: ## Build the web app
